@@ -1,6 +1,6 @@
 import type { Component } from "mozithermodb-settings";
-import { buildData, buildComponentData, buildComponentsData } from "../src/docs/data";
-import type { RawThermoRecord } from "../src/types";
+import { buildData, buildComponentData, buildComponentsData } from "mozithermodb";
+import type { RawThermoRecord } from "mozithermodb";
 
 const methane = { name: "Methane", formula: "CH4", state: "g" } as Component;
 const ethane = { name: "Ethane", formula: "C2H6", state: "g" } as Component;

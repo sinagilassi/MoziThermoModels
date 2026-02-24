@@ -1,7 +1,7 @@
 import type { Component } from "mozithermodb-settings";
-import { createEq, buildComponentsEquation } from "../src/docs/equation";
-import { buildComponentsData } from "../src/docs/data";
-import type { ConfigParamMap, ConfigArgMap, ConfigRetMap, RawThermoRecord, Eq } from "../src/types";
+import { createEq, buildComponentsEquation } from "mozithermodb";
+import { buildComponentsData } from "mozithermodb";
+import type { ConfigParamMap, ConfigArgMap, ConfigRetMap, RawThermoRecord, Eq } from "mozithermodb";
 
 type P = "A" | "B";
 type A = "T";

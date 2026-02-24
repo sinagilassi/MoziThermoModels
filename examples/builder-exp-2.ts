@@ -1,5 +1,5 @@
-import { createEq, buildEquation, launchEq } from "../src/docs/equation";
-import type { Eq, ConfigParamMap, ConfigArgMap, ConfigRetMap } from "../src/types";
+import { createEq, buildEquation, launchEq } from "mozithermodb";
+import type { Eq, ConfigParamMap, ConfigArgMap, ConfigRetMap } from "mozithermodb";
 
 type P = "A" | "B" | "C" | "D" | "E";
 type A = "T";

@@ -1,8 +1,9 @@
 import type { Component } from "mozithermodb-settings";
+import { createEq, buildComponentsEquation } from "mozithermodb";
+import { buildComponentsData } from "mozithermodb";
+import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "mozithermodb";
+// ! MoziThermoModels
 import { checkMultiComponentEosRoots } from "../src";
-import { createEq, buildComponentsEquation } from "../src/docs/equation";
-import { buildComponentsData } from "../src/docs/data";
-import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "../src/types";
 
 type P = "A" | "B" | "C" | "D" | "E";
 type A = "T";

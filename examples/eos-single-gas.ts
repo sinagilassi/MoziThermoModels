@@ -1,8 +1,9 @@
 import type { Component } from "mozithermodb-settings";
+import { createEq, buildComponentEquation } from "mozithermodb";
+import { buildComponentData } from "mozithermodb";
+import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "mozithermodb";
+// ! MoziThermoModels
 import { calcGasFugacity } from "../src";
-import { createEq, buildComponentEquation } from "../src/docs/equation";
-import { buildComponentData } from "../src/docs/data";
-import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "../src/types";
 
 type P = "A" | "B" | "C" | "D" | "E";
 type A = "T";

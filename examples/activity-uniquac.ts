@@ -1,3 +1,4 @@
+// ! MoziThermoModels
 import { calcActivityCoefficientUsingUniquacModel } from "../src";
 
 console.log(calcActivityCoefficientUsingUniquacModel(
