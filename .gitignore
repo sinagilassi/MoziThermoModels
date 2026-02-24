@@ -46,3 +46,6 @@ private/
 # codex
 codex/
 .codex/
+
+# guide
+guide/
