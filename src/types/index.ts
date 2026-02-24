@@ -30,8 +30,6 @@ export interface ScalarWithUnit {
 export interface ModelSourceLike {
   dataSource?: Record<string, unknown>;
   equationSource?: Record<string, unknown>;
-  datasource?: Record<string, unknown>;
-  equationsource?: Record<string, unknown>;
 }
 
 export interface ComponentEosRootResult {
