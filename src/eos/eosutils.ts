@@ -1,5 +1,5 @@
 import { convertFromTo } from "mozicuc";
-import { R_CONST } from "../configs/constants";
+import { R_CONST } from "@/configs/constants";
 import { ThermoModelError } from "@/errors";
 import type { PhaseName, RootAnalysisEntry } from "@/types";
 

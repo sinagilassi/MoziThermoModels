@@ -9,7 +9,7 @@ import type {
   SolverMethod,
   ComponentEosRootResult,
   ComponentGasFugacityResult
-} from "../types";
+} from "@/types";
 import { normalizeEosModelName, setFeedSpecification } from "@/utils";
 import { ThermoModelError } from "@/errors";
 import { FugacityCore } from "./fugacitycore";

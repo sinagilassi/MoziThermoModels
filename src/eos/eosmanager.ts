@@ -1,13 +1,12 @@
-import { ThermoModelError } from "../core";
+import { ThermoModelError } from "@/core";
 import {
   selectRootsByAnalysis,
   solveByFsolveLikeMultiStart,
   solveByLeastSquaresMultiStart,
   solveByNewtonMultiStart,
   solveByPolynomialRoots,
-  type SolverMethod as LocalSolverMethod
 } from "@/solvers";
-import type { EosModelName } from "../types";
+import type { EosModelName, SolverMethod } from "@/types";
 import { EOSModels, type ComponentEosParams, type MixtureEosParams } from "./eosmodels";
 import { EOSUtils } from "./eosutils";
 
@@ -112,7 +111,7 @@ export class EOSManager extends EOSModels {
       : this.eosEquationCoefficientMixture(params0 as MixtureEosParams);
     const rootId = rootAnalysis.root?.[0] ?? 3;
 
-    const requestedSolver = solverMethod as LocalSolverMethod;
+    const requestedSolver = solverMethod as SolverMethod;
     const fnCtx = {
       fn: (x: number, ctx: ComponentEosParams | MixtureEosParams) =>
         mode === "single"

@@ -1,6 +1,7 @@
-import { ThermoModelError } from "../core";
+import { ThermoModelError } from "@/core";
+import type { SolverMethod } from "@/types";
 
-export type SolverMethod = "ls" | "newton" | "fsolve" | "root";
+
 
 export interface ScalarFunctionContext<T> {
   fn: (x: number, ctx: T) => number;
@@ -22,25 +23,64 @@ export interface SolverRunResult {
   diagnostics?: Record<string, unknown>;
 }
 
+/**
+ * Round a numeric value to a fixed decimal precision.
+ *
+ * @param value Input value to round.
+ * @param decimals Number of decimal places to keep.
+ * @returns Rounded numeric value.
+ */
 export function roundTo(value: number, decimals = 10): number {
   const p = 10 ** decimals;
   return Math.round(value * p) / p;
 }
 
+/**
+ * Check whether a number is finite and strictly positive.
+ *
+ * @param x Value to validate.
+ * @returns `true` when `x` is finite and `x > 0`; otherwise `false`.
+ */
 export function isFinitePositive(x: number): boolean {
   return Number.isFinite(x) && x > 0;
 }
 
+/**
+ * Clamp a scalar value to an inclusive range.
+ *
+ * @param x Value to clamp.
+ * @param lo Lower inclusive bound.
+ * @param hi Upper inclusive bound.
+ * @returns Clamped value in `[lo, hi]`.
+ */
 export function clamp(x: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, x));
 }
 
+/**
+ * Generate linearly spaced points between two bounds.
+ *
+ * @param min Start value.
+ * @param max End value.
+ * @param n Number of points to generate.
+ * @returns Array of `n` points from `min` to `max` (inclusive). If `n <= 1`, returns `[min]`.
+ */
 export function linspace(min: number, max: number, n: number): number[] {
   if (n <= 1) return [min];
   const step = (max - min) / (n - 1);
   return Array.from({ length: n }, (_, i) => min + i * step);
 }
 
+/**
+ * Estimate the first derivative using a central finite-difference scheme.
+ *
+ * A scale-aware step is used to improve numerical stability across small and large `x`.
+ *
+ * @param fn Scalar function `f(x)`.
+ * @param x Evaluation point.
+ * @param h Base relative step size.
+ * @returns Approximate derivative `f'(x)`.
+ */
 export function numericalDerivative(fn: (x: number) => number, x: number, h = 1e-6): number {
   const hEff = Math.max(Math.abs(x) * h, h);
   const f1 = fn(x + hEff);
@@ -48,6 +88,13 @@ export function numericalDerivative(fn: (x: number) => number, x: number, h = 1e
   return (f1 - f0) / (2 * hEff);
 }
 
+/**
+ * Sort values in ascending order and remove near-duplicates.
+ *
+ * @param values Input values.
+ * @param tol Absolute tolerance for considering two adjacent sorted values equal.
+ * @returns Sorted array with near-duplicate values removed.
+ */
 export function dedupeSorted(values: number[], tol = 1e-8): number[] {
   const sorted = [...values].sort((a, b) => a - b);
   const out: number[] = [];
@@ -57,6 +104,18 @@ export function dedupeSorted(values: number[], tol = 1e-8): number[] {
   return out;
 }
 
+/**
+ * Normalize candidate roots for downstream use.
+ *
+ * Processing order: finite filtering, optional positivity filtering, rounding, then deduplication.
+ *
+ * @param roots Raw candidate roots.
+ * @param options Normalization settings.
+ * @param options.positiveOnly When `true`, keep only roots `> 0`.
+ * @param options.roundDecimals Decimal places used for `roundTo`.
+ * @param options.dedupeTol Tolerance used when deduplicating sorted roots.
+ * @returns Cleaned root list.
+ */
 export function normalizeRootCandidates(
   roots: number[],
   options: { positiveOnly?: boolean; roundDecimals?: number; dedupeTol?: number } = {}
@@ -69,6 +128,20 @@ export function normalizeRootCandidates(
   return dedupeSorted(rounded, dedupeTol);
 }
 
+/**
+ * Select root candidates according to root-analysis mode.
+ *
+ * Modes:
+ * - `1`: return both min and max roots (two-phase candidate set)
+ * - `2`: return minimum root only
+ * - `3`: return maximum root only
+ * - `4`: return maximum root only
+ *
+ * @param rootId Root-analysis selector.
+ * @param Zi Candidate roots.
+ * @returns Normalized selected roots. Returns empty array when `Zi` is empty.
+ * @throws {ThermoModelError} If `rootId` is not one of `1..4`.
+ */
 export function selectRootsByAnalysis(rootId: number, Zi: number[]): number[] {
   if (!Zi.length) return [];
   if (rootId === 1) return normalizeRootCandidates([Math.min(...Zi), Math.max(...Zi)]);
@@ -78,11 +151,25 @@ export function selectRootsByAnalysis(rootId: number, Zi: number[]): number[] {
   throw new ThermoModelError(`Invalid root analysis id: ${rootId}`, "INVALID_ROOT_ID");
 }
 
+/**
+ * Solve a cubic polynomial using the analytic cubic solver and normalize the real roots.
+ *
+ * @param coeff Polynomial coefficients as `[a, b, c, d]` for `ax^3 + bx^2 + cx + d = 0`.
+ * @returns Solver run result with method set to `"root"`.
+ */
 export function solveByPolynomialRoots(coeff: [number, number, number, number]): SolverRunResult {
   const roots = normalizeRootCandidates(solveCubicRealRoots(coeff[0], coeff[1], coeff[2], coeff[3]));
   return { roots, solver_method: "root" };
 }
 
+/**
+ * Run Newton multi-start root finding over a fixed guess grid.
+ *
+ * @typeParam T Context object type passed into `target.fn`.
+ * @param target Function context containing residual function and immutable context.
+ * @param options Multi-start and convergence options.
+ * @returns Aggregated solver result with normalized roots and diagnostics.
+ */
 export function solveByNewtonMultiStart<T>(
   target: ScalarFunctionContext<T>,
   options: MultiStartOptions = {}
@@ -110,6 +197,16 @@ export function solveByNewtonMultiStart<T>(
   };
 }
 
+/**
+ * Run a hybrid fsolve-like multi-start solver.
+ *
+ * Uses derivative-based updates when stable and secant fallback otherwise.
+ *
+ * @typeParam T Context object type passed into `target.fn`.
+ * @param target Function context containing residual function and immutable context.
+ * @param options Multi-start and convergence options.
+ * @returns Aggregated solver result with normalized roots and diagnostics.
+ */
 export function solveByFsolveLikeMultiStart<T>(
   target: ScalarFunctionContext<T>,
   options: MultiStartOptions = {}
@@ -137,6 +234,15 @@ export function solveByFsolveLikeMultiStart<T>(
   };
 }
 
+/**
+ * Run least-squares style multi-start root search within analysis windows.
+ *
+ * @typeParam T Context object type passed into `target.fn`.
+ * @param rootId Root-analysis selector used to define search windows.
+ * @param target Function context containing residual function and immutable context.
+ * @param options Multi-start and convergence options.
+ * @returns Aggregated solver result with normalized roots and diagnostics.
+ */
 export function solveByLeastSquaresMultiStart<T>(
   rootId: number,
   target: ScalarFunctionContext<T>,
@@ -165,6 +271,15 @@ export function solveByLeastSquaresMultiStart<T>(
   };
 }
 
+/**
+ * Build initial guesses and search windows for least-squares multi-start solving.
+ *
+ * @param rootId Root-analysis selector controlling how windows are partitioned.
+ * @param guessNo Number of initial guesses.
+ * @param bounds Tuple `[min, max, mid]` used to split search windows.
+ * @returns Array of guess/window pairs.
+ * @throws {ThermoModelError} If `rootId` is not one of `1..4`.
+ */
 export function buildRootSearchWindows(
   rootId: number,
   guessNo: number,
@@ -193,6 +308,14 @@ export function buildRootSearchWindows(
 
 type ScalarSolveResult = { success: boolean; x?: number; iterations: number };
 
+/**
+ * Solve a scalar root-finding problem using Newton's method from one initial guess.
+ *
+ * @param fn Residual function.
+ * @param x0 Initial guess.
+ * @param options Convergence and iteration controls.
+ * @returns Scalar solve result containing success flag, root estimate, and iteration count.
+ */
 function newtonScalar(fn: (x: number) => number, x0: number, options: MultiStartOptions): ScalarSolveResult {
   const maxIter = options.maxIter ?? 80;
   const ftol = options.ftol ?? 1e-8;
@@ -218,6 +341,17 @@ function newtonScalar(fn: (x: number) => number, x0: number, options: MultiStart
   return { success: Number.isFinite(fEnd) && Math.abs(fEnd) <= Math.max((options.ftol ?? 1e-8) * 10, 1e-6), x, iterations: maxIter };
 }
 
+/**
+ * Solve a scalar equation with a derivative-first / secant-fallback strategy.
+ *
+ * This routine mimics common `fsolve` behavior by preferring Newton-like steps and
+ * falling back to secant updates when derivative information is unreliable.
+ *
+ * @param fn Residual function.
+ * @param x0 Initial guess.
+ * @param options Convergence and iteration controls.
+ * @returns Scalar solve result containing success flag, root estimate, and iteration count.
+ */
 function fsolveLikeScalar(fn: (x: number) => number, x0: number, options: MultiStartOptions): ScalarSolveResult {
   const maxIter = options.maxIter ?? 120;
   const ftol = options.ftol ?? 1e-8;
@@ -258,6 +392,18 @@ function fsolveLikeScalar(fn: (x: number) => number, x0: number, options: MultiS
   return { success: Math.abs(fx) <= Math.max(ftol * 10, 1e-6), x, iterations: maxIter };
 }
 
+/**
+ * Find a root candidate by minimizing squared residuals inside a bounded window.
+ *
+ * The routine performs grid-refinement search, then Newton polishing, then optional
+ * sign-change bracketing and bisection fallback.
+ *
+ * @param fn Residual function.
+ * @param x0 Initial guess.
+ * @param window Search interval `[lo, hi]`.
+ * @param options Convergence and iteration controls.
+ * @returns Scalar solve result containing success flag, root estimate, and iteration count.
+ */
 function leastSquaresScalar(
   fn: (x: number) => number,
   x0: number,
@@ -310,11 +456,26 @@ function leastSquaresScalar(
   return { success: Number.isFinite(fBest) && Math.abs(fBest) <= Math.max(ftol * 10, 1e-6), x: xBest, iterations };
 }
 
+/**
+ * Compute a safe squared residual value.
+ *
+ * @param v Input residual.
+ * @returns `v^2` for finite values; `Infinity` for non-finite values.
+ */
 function sqSafe(v: number): number {
   if (!Number.isFinite(v)) return Number.POSITIVE_INFINITY;
   return v * v;
 }
 
+/**
+ * Find a bracketing interval where the residual changes sign.
+ *
+ * @param fn Residual function.
+ * @param lo Lower scan bound.
+ * @param hi Upper scan bound.
+ * @param n Number of scan points.
+ * @returns Bracket `[a, b]` with sign change (or exact root endpoint), else `null`.
+ */
 function findBracket(fn: (x: number) => number, lo: number, hi: number, n = 50): [number, number] | null {
   const xs = linspace(lo, hi, n);
   let xPrev = xs[0];
@@ -334,6 +495,15 @@ function findBracket(fn: (x: number) => number, lo: number, hi: number, n = 50):
   return null;
 }
 
+/**
+ * Solve a bracketed scalar equation using bisection.
+ *
+ * @param fn Residual function.
+ * @param lo Lower bracket endpoint.
+ * @param hi Upper bracket endpoint.
+ * @param opts Bisection settings (`ftol`, `xtol`, `maxIter`).
+ * @returns Scalar solve result containing success flag, root estimate, and iteration count.
+ */
 function bisection(fn: (x: number) => number, lo: number, hi: number, opts: { ftol: number; xtol: number; maxIter: number }): ScalarSolveResult {
   let a = lo;
   let b = hi;
@@ -352,6 +522,19 @@ function bisection(fn: (x: number) => number, lo: number, hi: number, opts: { ft
   return { success: false, x: 0.5 * (a + b), iterations: opts.maxIter };
 }
 
+/**
+ * Compute real roots of a cubic polynomial.
+ *
+ * Solves `ax^3 + bx^2 + cx + d = 0` through depressed-cubic reduction and
+ * discriminant-based branching.
+ *
+ * @param a Cubic coefficient.
+ * @param b Quadratic coefficient.
+ * @param c Linear coefficient.
+ * @param d Constant term.
+ * @returns Array of real roots (one, two, or three values depending on discriminant).
+ * @throws {ThermoModelError} If `a` is effectively zero.
+ */
 export function solveCubicRealRoots(a: number, b: number, c: number, d: number): number[] {
   if (Math.abs(a) < 1e-30) throw new ThermoModelError("Leading cubic coefficient cannot be zero", "INVALID_CUBIC");
   const A = b / a;
@@ -383,6 +566,12 @@ export function solveCubicRealRoots(a: number, b: number, c: number, d: number):
   ];
 }
 
+/**
+ * Compute a real-valued cubic root while preserving sign for negative inputs.
+ *
+ * @param x Input value.
+ * @returns Real cubic root of `x`.
+ */
 function cbrtReal(x: number): number {
   return x < 0 ? -Math.pow(-x, 1 / 3) : Math.pow(x, 1 / 3);
 }
