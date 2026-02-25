@@ -61,11 +61,14 @@ const modelSource = {
   equationSource: buildComponentsEquation(components, eqTemplate, [co2Records, nButaneRecords], ["Name-State"], true, "Name-State")
 };
 
-console.log(calcMixtureFugacity(
+const res = calcMixtureFugacity(
   components,
   { value: 10, unit: "bar" },
   { value: 444, unit: "K" },
   modelSource,
   "RK"
-));
+);
+
+// log
+console.log(JSON.stringify(res, null, 2));
 
