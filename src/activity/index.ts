@@ -3,7 +3,7 @@ import type {
   ComponentLike,
   ExcessGibbsResult,
   MixtureKey,
-  ModelSourceLike
+  ModelSource
 } from "../types";
 import { createMixtureId, setComponentId, ThermoModelError } from "../core";
 
@@ -365,11 +365,11 @@ export function calcActivityCoefficientUsingUniquacModel(
 }
 
 function maybeExtractActivityParams(
-  modelSource: ModelSourceLike,
+  modelSource: ModelSource,
   mixtureId: string,
   keys: string[]
 ): Record<string, number> | undefined {
-  const data = (modelSource.dataSource ?? modelSource.datasource) as Record<string, unknown> | undefined;
+  const data = modelSource.dataSource as Record<string, unknown> | undefined;
   if (!data) return undefined;
   const node = data[mixtureId] as Record<string, unknown> | undefined;
   if (!node || typeof node !== "object") return undefined;
@@ -385,7 +385,7 @@ export function calcActivityCoefficient(
   components: ComponentLike[],
   pressure: { value: number; unit: string },
   temperature: { value: number; unit: string },
-  modelSource: ModelSourceLike,
+  modelSource: ModelSource,
   modelName: "NRTL" | "UNIQUAC",
   componentKey: "Name-State" | "Formula-State" = "Name-State",
   mixtureKey: MixtureKey = "Name",

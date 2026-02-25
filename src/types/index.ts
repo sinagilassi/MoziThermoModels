@@ -19,13 +19,6 @@ export type PhaseName = "VAPOR" | "LIQUID" | "VAPOR-LIQUID" | "SUPERCRITICAL" | 
 
 export type ComponentLike = import("mozithermodb-settings").Component;
 
-export type ModelSourceLike = {
-  dataSource?: Record<string, unknown>;
-  equationSource?: Record<string, unknown>;
-  datasource?: Record<string, unknown>;
-  equationsource?: Record<string, unknown>;
-};
-
 export interface NumericProperty {
   value: number | Record<string, number>;
   unit: string;
