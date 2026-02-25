@@ -52,13 +52,14 @@ const dataSource = buildComponentData(propane, propaneRecords, ["Name-State"], t
 const equationSource = buildComponentEquation(propane, vaporPressureEq, propaneRecords, ["Name-State"], true, "Name-State");
 const modelSource = { dataSource, equationSource };
 
-console.log(
-  calcGasFugacity(
-    propane,
-    { value: 9.99, unit: "bar" },
-    { value: 300.1, unit: "K" },
-    modelSource,
-    "PR"
-  )
+const res = calcGasFugacity(
+  propane,
+  { value: 9.99, unit: "bar" },
+  { value: 300.1, unit: "K" },
+  modelSource,
+  "PR"
 );
+
+// log result
+console.log(JSON.stringify(res, null, 2));
 
