@@ -1,7 +1,7 @@
 // import libs
 import { convertFromTo } from "mozicuc";
 // ! LOCALS
-import type { Component, ModelSource, Pressure, Temperature } from "@/types";
+import type { Component, ModelSource, Pressure, Temperature, DataSource, EquationSource } from "@/types";
 import { ThermoModelError } from "@/errors";
 
 
@@ -30,4 +30,16 @@ export function validatePressure(pressure: Pressure): void {
 export function validateTemperature(temperature: Temperature): void {
     if (!temperature || typeof temperature.value !== "number" || !temperature.unit) throw new ThermoModelError("Invalid temperature input", "INVALID_TEMPERATURE");
     void convertFromTo(temperature.value, String(temperature.unit), "K");
+}
+
+export function getDataSource(modelSource: ModelSource): DataSource {
+    const ds = modelSource.dataSource;
+    if (!ds) throw new ThermoModelError("Missing dataSource in modelSource", "MISSING_MODEL_SOURCE");
+    return ds;
+}
+
+export function getEquationSource(modelSource: ModelSource): EquationSource {
+    const es = modelSource.equationSource;
+    if (!es) throw new ThermoModelError("Missing equationSource in modelSource", "MISSING_MODEL_SOURCE");
+    return es;
 }

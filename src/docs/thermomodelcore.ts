@@ -84,7 +84,12 @@ export class ThermoModelCore {
    * @param kwargs - Optional extensible options forwarded to EOS initialization and root computation.
    * @returns Root-solving result from `EosCore.checkEosRootsMultiComponent`.
    */
-  checkEosRootsMultiComponent(modelName: EosModelName, modelInput: Record<string, any>, modelSource: ModelSource, kwargs: Record<string, unknown> = {}) {
+  checkEosRootsMultiComponent(
+    modelName: EosModelName,
+    modelInput: Record<string, any>,
+    modelSource: ModelSource,
+    kwargs: Record<string, unknown> = {}
+  ) {
     return this.initEos(kwargs).checkEosRootsMultiComponent(modelName, modelInput, modelSource, kwargs);
   }
 

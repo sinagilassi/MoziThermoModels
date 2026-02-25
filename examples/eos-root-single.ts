@@ -44,11 +44,14 @@ const modelSource = {
   equationSource: buildComponentEquation(propane, eqTemplate, records, ["Name-State"], true, "Name-State")
 };
 
-console.log(checkComponentEosRoots(
+const res = checkComponentEosRoots(
   propane,
   { value: 10, unit: "bar" },
   { value: 300.1, unit: "K" },
   modelSource,
   "PR"
-));
+);
+
+// log result
+console.log(JSON.stringify(res, null, 2));
 

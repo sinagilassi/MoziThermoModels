@@ -105,17 +105,29 @@ export function checkMultiComponentEosRoots(
   componentKey: ComponentKey = "Name-State",
   kwargs: Record<string, unknown> = {}
 ): MixtureEosRootResult {
+  // SECTION: Input validation and normalization
   if (!Array.isArray(components) || components.length === 0) throw new ThermoModelError("components must be a non-empty array", "INVALID_COMPONENTS");
+
+  // NOTE: validate components and extract mole fractions, normalize feed specification in lower layer
   components.forEach(validateComponent);
+  // NOTE: validate pressure and temperature objects (value/unit), convert to SI in lower layer
   validatePressure(pressure);
   validateTemperature(temperature);
+
+  // SECTION: Build feed specification and model input, delegate to ThermoModelCore
   const feed = setFeedSpecification(Object.fromEntries(components.map((c) => [set_component_id(c as any, componentKey), Number(c.mole_fraction ?? 0)])));
+
+  // NOTE: model input includes feed specification, P/T with units, and optional phase hint forwarded from kwargs
   const modelInput = {
     "feed-specification": feed,
     pressure: [pressure.value, pressure.unit] as [number, string],
     temperature: [temperature.value, temperature.unit] as [number, string]
   };
+
+  // SECTION: Delegate to ThermoModelCore and parse result
   const core = new ThermoModelCore();
+
+  // NOTE: forward bubble/dew point mode hints in kwargs for potential use in lower layer EOS logic (currently parity options)
   return parseMixtureEosRootResult(core.checkEosRootsMultiComponent(modelName, modelInput, normalizeModelSource(modelSource), {
     ...kwargs,
     bubble_point_pressure_mode: bubblePointPressureMode,

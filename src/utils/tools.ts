@@ -21,6 +21,9 @@ export function setFeedSpecification(input: any): Record<string, number> {
     if (typeof input === "object" && input && !Array.isArray(input) && "feedSpecification" in input && input.feedSpecification) {
         return normalizeFractions(input.feedSpecification as Record<string, number>);
     }
+    if (typeof input === "object" && input && !Array.isArray(input) && "feed-specification" in input && input["feed-specification"]) {
+        return normalizeFractions(input["feed-specification"] as Record<string, number>);
+    }
     return normalizeFractions((input ?? {}) as Record<string, number>);
 }
 

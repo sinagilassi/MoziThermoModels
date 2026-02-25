@@ -1,5 +1,5 @@
 import { convertFromTo } from "mozicuc";
-import type { ModelSource } from "mozithermodb";
+import type { DataSource, EquationSource, ModelSource } from "mozithermodb";
 import type {
   EosModelName,
   LiquidFugacityMode,
@@ -10,7 +10,7 @@ import type {
   ComponentEosRootResult,
   ComponentGasFugacityResult
 } from "@/types";
-import { normalizeEosModelName, setFeedSpecification } from "@/utils";
+import { normalizeEosModelName, setFeedSpecification, getDataSource, getEquationSource } from "@/utils";
 import { ThermoModelError } from "@/errors";
 import { FugacityCore } from "./fugacitycore";
 import { EOSUtils } from "./eosutils";
@@ -214,7 +214,7 @@ export class EosCore {
     const equationsource = getEquationSource(modelSource);
     const eos_model = normalizeEosModelName(modelName);
     if (!modelInput.pressure || !modelInput.temperature) throw new ThermoModelError("Missing operating conditions", "MISSING_OPERATING_CONDITIONS");
-    const feed = setFeedSpecification({ "feed-specification": modelInput["feed-specification"] ?? {} });
+    const feed = setFeedSpecification(modelInput["feed-specification"] ?? {});
     const components = Object.keys(feed);
     const yi = Object.values(feed);
     if (!components.length) throw new ThermoModelError("Feed specification is empty", "MISSING_FEED_SPECIFICATION");
@@ -290,12 +290,20 @@ export class EosCore {
   ): MixtureEosRootResult {
     const datasource = getDataSource(modelSource);
     const equationsource = getEquationSource(modelSource);
+
+    // >> check required fields
     if (!modelInput.pressure || !modelInput.temperature) throw new ThermoModelError("Missing operating conditions", "MISSING_OPERATING_CONDITIONS");
-    const feed = setFeedSpecification({ "feed-specification": modelInput["feed-specification"] ?? {} });
+
+    // SECTION: Input processing - normalize feed specification and convert units to SI
+    // NOTE: normalize feed specification to mole fraction
+    const feed = setFeedSpecification(modelInput["feed-specification"] ?? {});
+    // NOTE: extract components and mole fractions from feed specification, convert P/T to SI units
     const components = Object.keys(feed);
     const yi = Object.values(feed);
     const P = convertFromTo(Number(modelInput.pressure[0]), String(modelInput.pressure[1]), "Pa");
     const T = convertFromTo(Number(modelInput.temperature[0]), String(modelInput.temperature[1]), "K");
+
+    // SECTION: execute EOS root analysis via EOSUtils
     const util = new EOSUtils(datasource, equationsource);
     const root = util.eosRootAnalysis(P, T, components, Number(kwargs.tolerance ?? 1e-3), { mole_fraction: yi });
     void modelName;
@@ -314,15 +322,3 @@ export class EosCore {
  * Backward-compatible lowercase class alias for {@link EosCore}.
  */
 export class eosCore extends EosCore { }
-
-function getDataSource(modelSource: ModelSource): Record<string, any> {
-  const ds = modelSource.dataSource;
-  if (!ds) throw new ThermoModelError("Missing dataSource in modelSource", "MISSING_MODEL_SOURCE");
-  return ds as Record<string, any>;
-}
-
-function getEquationSource(modelSource: ModelSource): Record<string, any> {
-  const es = modelSource.equationSource;
-  if (!es) throw new ThermoModelError("Missing equationSource in modelSource", "MISSING_MODEL_SOURCE");
-  return es as Record<string, any>;
-}
