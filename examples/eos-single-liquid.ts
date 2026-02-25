@@ -45,13 +45,16 @@ const modelSource = {
   equationSource: buildComponentEquation(propane, eqTemplate, records, ["Name-State"], true, "Name-State")
 };
 
-console.log(calcLiquidFugacity(
+
+const res = calcLiquidFugacity(
   propane,
   { value: 10, unit: "bar" },
   { value: 300.1, unit: "K" },
   modelSource,
   "PR",
-  "ls",
-  "Poynting"
-));
+  "Name-State",
+  { liquid_fugacity_mode: "Poynting" }
+);
 
+// log
+console.log(JSON.stringify(res, null, 2));
