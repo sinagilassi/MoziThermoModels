@@ -1,7 +1,10 @@
 import type { ModelSource } from "mozithermodb";
 import { ThermoModelError } from "@/errors";
-import type { EosModelName, LiquidFugacityMode, SolverMethod } from "../types";
+import type { Component, EosModelName, LiquidFugacityMode, SolverMethod } from "../types";
 import { EosCore } from "../eos/eoscore";
+import { ActivityCore } from "../activity/activitycore";
+import { calcActivityCoefficient as calcActivityCoefficientActivity } from "../activity/activity_methods";
+import { normalizeModelSource } from "@/utils";
 
 /**
  * EOS-focused thermodynamic facade for fugacity and root-solving workflows.
@@ -17,6 +20,10 @@ import { EosCore } from "../eos/eoscore";
  * - Explicitly rejects activity-model initialization/selection in this port via `NOT_IMPLEMENTED` errors.
  */
 export class ThermoModelCore {
+  private _input: Record<string, unknown> = {};
+  private _results: Record<string, unknown> = {};
+  get input() { return this._input; }
+  get results() { return this._results; }
   /**
    * Calculates fugacity for a single-component system using the selected equation of state (EOS).
    *
@@ -106,27 +113,59 @@ export class ThermoModelCore {
     return new EosCore();
   }
 
-  /**
-   * Placeholder for activity-model initialization.
-   *
-   * @throws {ThermoModelError} Always throws with code `"NOT_IMPLEMENTED"` because
-   * activity-model workflows are intentionally out of scope for this EOS-only TypeScript port.
-   */
-  init_activity(): never { throw new ThermoModelError("Activity initialization is out of scope in ThermoModelCore TS EOS port", "NOT_IMPLEMENTED"); }
-  /**
-   * Placeholder for multi-activity-model initialization.
-   *
-   * @throws {ThermoModelError} Always throws with code `"NOT_IMPLEMENTED"` because
-   * activity-model workflows are intentionally out of scope for this EOS-only TypeScript port.
-   */
-  init_activities(): never { throw new ThermoModelError("Activity initialization is out of scope in ThermoModelCore TS EOS port", "NOT_IMPLEMENTED"); }
-  /**
-   * Placeholder for activity-model selection.
-   *
-   * @throws {ThermoModelError} Always throws with code `"NOT_IMPLEMENTED"` because
-   * activity-model workflows are intentionally out of scope for this EOS-only TypeScript port.
-   */
-  select_activities(): never { throw new ThermoModelError("Activity selection is out of scope in ThermoModelCore TS EOS port", "NOT_IMPLEMENTED"); }
+  initActivity(args: {
+    datasource?: Record<string, unknown>;
+    equationsource?: Record<string, unknown>;
+    dataSource?: Record<string, unknown>;
+    equationSource?: Record<string, unknown>;
+    components: string[];
+    mixture_id?: string;
+  }) {
+    const datasource = (args.datasource ?? args.dataSource ?? {}) as Record<string, unknown>;
+    const equationsource = (args.equationsource ?? args.equationSource ?? {}) as Record<string, unknown>;
+    return new ActivityCore(datasource, equationsource, args.components, { mixture_id: args.mixture_id });
+  }
+
+  initActivities(args: Parameters<ThermoModelCore["initActivity"]>[0]) {
+    const core = this.initActivity(args);
+    return {
+      nrtl: core.nrtl,
+      uniquac: core.uniquac,
+      unifac: core.unifac,
+      activity_core: core
+    };
+  }
+
+  selectActivities(args: {
+    model_name: "NRTL" | "UNIQUAC" | "UNIFAC";
+    datasource?: Record<string, unknown>;
+    equationsource?: Record<string, unknown>;
+    dataSource?: Record<string, unknown>;
+    equationSource?: Record<string, unknown>;
+    components: string[];
+    mixture_id?: string;
+  }) {
+    const core = this.initActivity(args);
+    return core.select(args.model_name);
+  }
+
+  calcActivityCoefficient(
+    components: Component[],
+    pressure: { value: number; unit: string },
+    temperature: { value: number; unit: string },
+    modelSource: ModelSource,
+    modelName: "NRTL" | "UNIQUAC",
+    kwargs: Record<string, unknown> = {}
+  ) {
+    const normalized = normalizeModelSource(modelSource);
+    const result = calcActivityCoefficientActivity(components, pressure as any, temperature as any, normalized, modelName, "Name-State", "Name", "-", "|", undefined, false, kwargs);
+    this._results.activity = result;
+    return result;
+  }
+
+  init_activity(...args: Parameters<ThermoModelCore["initActivity"]>) { return this.initActivity(...args); }
+  init_activities(...args: Parameters<ThermoModelCore["initActivities"]>) { return this.initActivities(...args); }
+  select_activities(...args: Parameters<ThermoModelCore["selectActivities"]>) { return this.selectActivities(...args); }
 
   /**
    * Snake-case compatibility alias for {@link calFugacity}.
