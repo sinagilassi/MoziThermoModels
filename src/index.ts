@@ -13,7 +13,6 @@ type LooseComponent = {
   formula: string;
   state: string;
   mole_fraction?: number;
-  moleFraction?: number;
   [key: string]: unknown;
 };
 

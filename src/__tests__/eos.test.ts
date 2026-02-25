@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildComponentData, buildComponentEquation, calcGasFugacity, checkComponentEosRoots, createEq } from "../index";
-import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "../types";
+import type { Component, ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "../types";
 
 type P = "A" | "B" | "C" | "D" | "E";
 type A = "T";
@@ -20,7 +20,7 @@ const eq: Eq<P, A> = (p, a) => ({
   symbol: "VaPr"
 });
 
-const propane = { name: "propane", formula: "C3H8", state: "g" };
+const propane: Component = { name: "propane", formula: "C3H8", state: "g", mole_fraction: 1 };
 const propaneRecords: RawThermoRecord[] = [
   { name: "Name", symbol: "Name", value: "propane", unit: "" },
   { name: "Formula", symbol: "Formula", value: "C3H8", unit: "" },
@@ -46,7 +46,7 @@ const modelSource = (() => {
 describe("eos", () => {
   it("checks root result shape", () => {
     const res = checkComponentEosRoots(
-      { name: "propane", formula: "C3H8", state: "g" },
+      { name: "propane", formula: "C3H8", state: "g", mole_fraction: 1 },
       { value: 10, unit: "bar" },
       { value: 300.1, unit: "K" },
       modelSource,

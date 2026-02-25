@@ -24,7 +24,7 @@ const dippr101: Eq<P, A> = (p, a) => ({
   symbol: "VaPr"
 });
 
-const propane = { name: "propane", formula: "C3H8", state: "l" } as Component;
+const propane = { name: "propane", formula: "C3H8", state: "l", mole_fraction: 1 } as Component;
 const records: RawThermoRecord[] = [
   { name: "Name", symbol: "Name", value: "propane", unit: "" },
   { name: "Formula", symbol: "Formula", value: "C3H8", unit: "" },

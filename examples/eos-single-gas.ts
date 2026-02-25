@@ -33,7 +33,7 @@ const dippr101: Eq<P, A> = (p, a) => {
 
 const vaporPressureEq = createEq(params, args, ret, dippr101, "Liquid Vapor Pressure (DIPPR 101)");
 
-const propane = { name: "propane", formula: "C3H8", state: "g" } as Component;
+const propane = { name: "propane", formula: "C3H8", state: "g", mole_fraction: 1 } as Component;
 const propaneRecords: RawThermoRecord[] = [
   { name: "Name", symbol: "Name", value: "propane", unit: "" },
   { name: "Formula", symbol: "Formula", value: "C3H8", unit: "" },

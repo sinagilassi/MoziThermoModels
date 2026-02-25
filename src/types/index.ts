@@ -1,8 +1,11 @@
 export * from "mozithermodb";
 export type * from "mozithermodb";
+// ! LOCALS
+export * from "./eos-types";
+
 
 export type {
-  Component as StrictComponent,
+  Component,
   ComponentInput,
   ComponentKey,
   MixtureKey,
@@ -12,16 +15,9 @@ export type {
   CustomProperty
 } from "mozithermodb-settings";
 
-export type Component = Omit<import("mozithermodb-settings").ComponentInput, "mole_fraction"> & {
-  mole_fraction?: number;
-  moleFraction?: number;
-};
-
 export type PhaseName = "VAPOR" | "LIQUID" | "VAPOR-LIQUID" | "SUPERCRITICAL" | "CRITICAL" | "SOLID";
 
-export type ComponentLike = import("mozithermodb-settings").Component & {
-  moleFraction?: number;
-};
+export type ComponentLike = import("mozithermodb-settings").Component;
 
 export type ModelSourceLike = {
   dataSource?: Record<string, unknown>;
@@ -116,7 +112,3 @@ export interface ActivityCoefficientResult {
   symbol: string;
   message?: string;
 }
-
-export type EosModelName = "SRK" | "PR" | "RK" | "vdW";
-export type SolverMethod = "ls" | "newton" | "fsolve" | "root";
-export type LiquidFugacityMode = "EOS" | "Poynting";

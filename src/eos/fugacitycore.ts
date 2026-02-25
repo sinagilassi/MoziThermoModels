@@ -1,4 +1,4 @@
-import { to } from "mozicuc";
+import { convertFromTo } from "mozicuc";
 import { ThermoModelError } from "../core";
 import type { EosModelName, LiquidFugacityMode, PhaseName } from "../types";
 import { EOSManager } from "./eosmanager";
@@ -33,8 +33,8 @@ export class FugacityCore extends EOSManager {
     this.datasource = datasource;
     this.equationsource = equationsource;
     this.components = components;
-    this.P = to(Number(operating_conditions.pressure[0]), `${operating_conditions.pressure[1]} => Pa`);
-    this.T = to(Number(operating_conditions.temperature[0]), `${operating_conditions.temperature[1]} => K`);
+    this.P = convertFromTo(Number(operating_conditions.pressure[0]), String(operating_conditions.pressure[1]), "Pa");
+    this.T = convertFromTo(Number(operating_conditions.temperature[0]), String(operating_conditions.temperature[1]), "K");
     this.phase = eos_parms.phase;
     this.eos_model = eos_parms["eos-model"];
     this.mode = eos_parms.mode;
