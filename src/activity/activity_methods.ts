@@ -27,6 +27,12 @@ function maybeExtractActivityParams(
   if (!raw || typeof raw !== "object") return undefined;
   const node = (raw as Record<string, unknown>)[mixtureId] as Record<string, unknown> | undefined;
   if (!node || typeof node !== "object") return undefined;
+
+  // TODO: consider mixture model source, there are different scenarios:
+  // 1. object with keys like "tau_ij", "alpha_ij", they contain arrays or objects with component-wise values
+  // 2. object with keys like ""tau_ij", "alpha_ij", they contain "mozimatrixdata""
+
+  // NOTE: extract data
   for (const target of keys) {
     const matched = Object.keys(node).find((k) => k.toLowerCase() === target.toLowerCase());
     const value = matched ? node[matched] : undefined;
@@ -43,7 +49,7 @@ export function calcActivityCoefficientUsingNrtlModel(
   temperature: Temperature,
   tau_ij: Record<string, number>,
   alpha_ij: Record<string, number>,
-  componentKey: "Name-State" | "Formula-State" = "Name-State",
+  componentKey: ComponentKey = "Name-State",
   mixtureKey: MixtureKey = "Name",
   separatorSymbol = "-",
   delimiter = "|",
@@ -69,7 +75,7 @@ export function calcActivityCoefficientUsingUniquacModel(
   tau_ij: Record<string, number>,
   r_i: Record<string, number>,
   q_i: Record<string, number>,
-  componentKey: "Name-State" | "Formula-State" = "Name-State",
+  componentKey: ComponentKey = "Name-State",
   mixtureKey: MixtureKey = "Name",
   separatorSymbol = "-",
   delimiter = "|",
@@ -94,7 +100,7 @@ export function calcActivityCoefficient(
   temperature: Temperature,
   modelSource: ModelSource,
   modelName: "NRTL" | "UNIQUAC",
-  componentKey: "Name-State" | "Formula-State" = "Name-State",
+  componentKey: ComponentKey = "Name-State",
   mixtureKey: MixtureKey = "Name",
   separatorSymbol = "-",
   delimiter = "|",
