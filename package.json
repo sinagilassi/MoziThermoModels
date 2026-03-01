@@ -30,9 +30,8 @@
   },
   "dependencies": {
     "mozicuc": "^1.1.1",
-    "mozithermodb": "^1.0.1",
-    "mozithermodb-settings": "^1.1.0",
-    "zod": "^4.3.6"
+    "mozithermodb": "^1.2.0",
+    "mozithermodb-settings": "^1.1.4"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.1",
