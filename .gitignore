@@ -50,3 +50,6 @@ codex/
 # guide
 guide
 guide/*
+
+# tgz files
+*.tgz
