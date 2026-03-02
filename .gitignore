@@ -48,4 +48,5 @@ codex/
 .codex/
 
 # guide
-guide/
+guide
+guide/*
