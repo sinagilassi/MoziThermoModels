@@ -439,38 +439,40 @@ export function calcActivityCoefficient(
       message,
       verbose
     );
+  } else if (modelName === "UNIQUAC") {
+    let tau_ij = kwargs.tau_ij as Record<string, number> | undefined;
+    const dU_ij = kwargs.dU_ij as Record<string, number> | undefined;
+    if (!tau_ij && dU_ij) {
+      const converted = calcTauIjWithDUijUsingUniquacModel(components, temperature, dU_ij, { mixture_delimiter: "|" });
+      tau_ij = converted.tau_ij_comp;
+    }
+    if (!tau_ij) tau_ij = maybeExtractActivityParams(normalizedModelSource, mixtureId, ["tau_ij", "tau"], components, componentKey, "matrix");
+    const r_i =
+      (kwargs.r_i as Record<string, number> | undefined) ??
+      maybeExtractActivityParams(normalizedModelSource, mixtureId, ["r_i", "r"], components, componentKey, "vector");
+    const q_i =
+      (kwargs.q_i as Record<string, number> | undefined) ??
+      maybeExtractActivityParams(normalizedModelSource, mixtureId, ["q_i", "q"], components, componentKey, "vector");
+    if (!tau_ij || !r_i || !q_i) {
+      throw new ThermoModelError("UNIQUAC requires tau_ij+r_i+q_i (or dU_ij+r_i+q_i)", "INVALID_ACTIVITY_INPUT");
+    }
+    return calcActivityCoefficientUsingUniquacModel(
+      components,
+      pressure,
+      temperature,
+      tau_ij,
+      r_i,
+      q_i,
+      componentKey,
+      mixtureKey,
+      separatorSymbol,
+      delimiter,
+      message,
+      verbose
+    );
+  } else {
+    throw new ThermoModelError(`Unsupported activity model: ${modelName}`, "UNSUPPORTED_MODEL");
   }
-
-  let tau_ij = kwargs.tau_ij as Record<string, number> | undefined;
-  const dU_ij = kwargs.dU_ij as Record<string, number> | undefined;
-  if (!tau_ij && dU_ij) {
-    const converted = calcTauIjWithDUijUsingUniquacModel(components, temperature, dU_ij, { mixture_delimiter: "|" });
-    tau_ij = converted.tau_ij_comp;
-  }
-  if (!tau_ij) tau_ij = maybeExtractActivityParams(normalizedModelSource, mixtureId, ["tau_ij", "tau"], components, componentKey, "matrix");
-  const r_i =
-    (kwargs.r_i as Record<string, number> | undefined) ??
-    maybeExtractActivityParams(normalizedModelSource, mixtureId, ["r_i", "r"], components, componentKey, "vector");
-  const q_i =
-    (kwargs.q_i as Record<string, number> | undefined) ??
-    maybeExtractActivityParams(normalizedModelSource, mixtureId, ["q_i", "q"], components, componentKey, "vector");
-  if (!tau_ij || !r_i || !q_i) {
-    throw new ThermoModelError("UNIQUAC requires tau_ij+r_i+q_i (or dU_ij+r_i+q_i)", "INVALID_ACTIVITY_INPUT");
-  }
-  return calcActivityCoefficientUsingUniquacModel(
-    components,
-    pressure,
-    temperature,
-    tau_ij,
-    r_i,
-    q_i,
-    componentKey,
-    mixtureKey,
-    separatorSymbol,
-    delimiter,
-    message,
-    verbose
-  );
 }
 
 export const calc_activity_coefficient = calcActivityCoefficient;
