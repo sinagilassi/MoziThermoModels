@@ -1,4 +1,5 @@
 import { convertFromTo } from "mozicuc";
+// ! LOCALS
 import type {
   ActivityCoefficientResult,
   Component,
@@ -8,8 +9,8 @@ import type {
   MixtureKey,
   Pressure,
   Temperature
-} from "../types";
-import { createMixtureId, setComponentId, ThermoModelError } from "../core";
+} from "@/types";
+import { createMixtureId, setComponentId, ThermoModelError } from "@/core";
 
 export const R_ACTIVITY = 8.314462618;
 

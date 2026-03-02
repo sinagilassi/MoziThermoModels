@@ -1,4 +1,5 @@
 // import libs
+// ! LOCALS
 import type {
   ActivityCoefficientResult,
   Component,
@@ -9,7 +10,7 @@ import type {
   Pressure,
   Temperature
 } from "@/types";
-import { createMixtureId, ThermoModelError } from "@/core";
+import { createMixtureId, setComponentId, ThermoModelError } from "@/core";
 import { normalizeModelSource, validateComponent, validatePressure, validateTemperature } from "@/utils";
 import { normalizeComponents } from "./_shared";
 import { NRTL } from "./nrtl";
@@ -29,26 +30,216 @@ import {
 function maybeExtractActivityParams(
   modelSource: ModelSource,
   mixtureId: string,
-  keys: string[]
+  keys: string[],
+  components: Component[],
+  componentKey: ComponentKey,
+  targetKind: "matrix" | "vector"
 ): Record<string, number> | undefined {
   const raw = (modelSource as any).dataSource ?? (modelSource as any).datasource;
-  if (!raw || typeof raw !== "object") return undefined;
-  const node = (raw as Record<string, unknown>)[mixtureId] as Record<string, unknown> | undefined;
-  if (!node || typeof node !== "object") return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
 
-  // TODO: consider mixture model source, there are different scenarios:
-  // 1. object with keys like "tau_ij", "alpha_ij", they contain arrays or objects with component-wise values
-  // 2. object with keys like ""tau_ij", "alpha_ij", they contain "mozimatrixdata""
+  // SECTION: find mixture node
+  const node = findMixtureNode(raw as Record<string, unknown>, mixtureId);
+  if (!node) return undefined;
 
-  // NOTE: extract data
   for (const target of keys) {
-    const matched = Object.keys(node).find((k) => k.toLowerCase() === target.toLowerCase());
-    const value = matched ? node[matched] : undefined;
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, Number(v ?? 0)]));
+    const value = findParamValue(node, [target]);
+    if (value == null) continue;
+
+    if (targetKind === "vector") {
+      const vectorRecord = extractVectorByComponentKey(value, components, componentKey);
+      if (vectorRecord) return vectorRecord;
+      continue;
+    }
+
+    const matrixRecord = extractFromMoziMatrixData(value, target, mixtureId, components, componentKey);
+    if (matrixRecord) return matrixRecord;
+
+    const plainRecord = coerceRecordToNumberMap(value);
+    if (plainRecord) return plainRecord;
+  }
+
+  return undefined;
+}
+
+function normalizeMixtureKeyForLookup(key: string): string {
+  return String(key ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\|\s*/g, "|");
+}
+
+function canonicalizeMixtureKey(key: string): string {
+  const normalized = normalizeMixtureKeyForLookup(key);
+  const parts = normalized
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length <= 1) return normalized;
+  return [...parts].sort().join("|");
+}
+
+/**
+ * Find the mixture node in the data source that matches the given mixtureId.
+ * @param dataSource The data source to search for the mixture node.
+ * @param mixtureId The mixture identifier to look for in the data source.
+ * @returns The mixture node if found, otherwise undefined.
+ */
+function findMixtureNode(
+  dataSource: Record<string, unknown>,
+  mixtureId: string
+): Record<string, unknown> | undefined {
+  const direct = dataSource[mixtureId];
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) {
+    return direct as Record<string, unknown>;
+  }
+
+  const target = normalizeMixtureKeyForLookup(mixtureId);
+
+  for (const [key, value] of Object.entries(dataSource)) {
+    if (
+      normalizeMixtureKeyForLookup(key) === target &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      return value as Record<string, unknown>;
     }
   }
+
+  const canonicalTarget = canonicalizeMixtureKey(mixtureId);
+  for (const [key, value] of Object.entries(dataSource)) {
+    if (
+      canonicalizeMixtureKey(key) === canonicalTarget &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      return value as Record<string, unknown>;
+    }
+  }
+
   return undefined;
+}
+
+function findParamValue(node: Record<string, unknown>, keys: string[]): unknown {
+  const targetNormSet = new Set(keys.map((key) => normalizeMatrixSymbolKey(key)));
+  for (const [key, value] of Object.entries(node)) {
+    if (targetNormSet.has(normalizeMatrixSymbolKey(key))) return value;
+  }
+  return undefined;
+}
+
+function coerceRecordToNumberMap(obj: unknown): Record<string, number> | undefined {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return undefined;
+  const entries = Object.entries(obj as Record<string, unknown>);
+  if (!entries.length) return undefined;
+
+  const out: Record<string, number> = {};
+  for (const [key, value] of entries) {
+    if (value && typeof value === "object") return undefined;
+    const numberValue = Number(value ?? 0);
+    if (!Number.isFinite(numberValue)) return undefined;
+    out[key] = numberValue;
+  }
+
+  return out;
+}
+
+function extractFromMoziMatrixData(
+  wrapper: unknown,
+  targetKey: string,
+  mixtureId: string,
+  components: Component[],
+  componentKey: ComponentKey
+): Record<string, number> | undefined {
+  const matrixSource = resolveMatrixSource(wrapper);
+  if (!matrixSource) return undefined;
+
+  const candidates = matrixSymbolCandidates(targetKey);
+  for (const candidate of candidates) {
+    try {
+      const matrixDict = matrixSource.matDict(candidate, components, componentKey, "|");
+      const coerced = coerceRecordToNumberMap(matrixDict);
+      if (coerced && Object.keys(coerced).length) return coerced;
+    } catch {
+      continue;
+    }
+  }
+
+  void mixtureId;
+  return undefined;
+}
+
+function normalizeMatrixSymbolKey(key: string): string {
+  return String(key ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "_");
+}
+
+function matrixSymbolCandidates(targetKey: string): string[] {
+  const normalized = normalizeMatrixSymbolKey(targetKey);
+  const compact = normalized.replace(/_i_j$/i, "").replace(/_ij$/i, "");
+  const out = new Set<string>();
+
+  const add = (value: string) => {
+    const next = String(value ?? "").trim();
+    if (!next) return;
+    out.add(next);
+  };
+
+  add(targetKey);
+  add(normalized);
+  add(normalized.replace(/_i_j$/i, "_ij"));
+  add(normalized.replace(/_ij$/i, "_i_j"));
+  add(compact);
+  add(`${compact}_i_j`);
+  add(`${compact}_ij`);
+
+  return [...out];
+}
+
+function resolveMatrixSource(wrapper: unknown): { matDict: (propertySymbol: string, components: Component[], componentKey?: ComponentKey, keyDelimiter?: string) => Record<string, number> } | undefined {
+  if (!wrapper || typeof wrapper !== "object") return undefined;
+
+  const direct = wrapper as Record<string, unknown>;
+  if (typeof (direct as any).matDict === "function") return direct as any;
+
+  const nested = findNestedMoziMatrixData(wrapper);
+  if (!nested || typeof nested !== "object") return undefined;
+  if (typeof (nested as any).matDict === "function") return nested as any;
+  return undefined;
+}
+
+function findNestedMoziMatrixData(wrapper: unknown): unknown {
+  if (!wrapper || typeof wrapper !== "object" || Array.isArray(wrapper)) return undefined;
+  for (const [key, value] of Object.entries(wrapper as Record<string, unknown>)) {
+    const normalized = String(key ?? "")
+      .toLowerCase()
+      .replace(/[_\s-]+/g, "");
+    if (normalized === "mozimatrixdata") return value;
+  }
+  return undefined;
+}
+
+function extractVectorByComponentKey(
+  value: unknown,
+  components: Component[],
+  componentKey: ComponentKey
+): Record<string, number> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const out: Record<string, number> = {};
+
+  for (const component of components) {
+    const key = setComponentId(component, componentKey);
+    const parsed = Number(source[key]);
+    if (!Number.isFinite(parsed)) return undefined;
+    out[key] = parsed;
+  }
+
+  return out;
 }
 
 /**
@@ -82,12 +273,11 @@ export function calcActivityCoefficientUsingNrtlModel(
 ): [ActivityCoefficientResult, Record<string, unknown>, ExcessGibbsResult] {
   void pressure;
   void temperature;
-  void componentKey;
   void mixtureKey;
   void separatorSymbol;
   void delimiter;
   void verbose;
-  const { names, moleFraction } = normalizeComponents(components);
+  const { names, moleFraction } = normalizeComponents(components, componentKey);
   const model = new NRTL(names);
   return model.cal({ mole_fraction: moleFraction, tau_ij, alpha_ij }, message);
 }
@@ -125,12 +315,11 @@ export function calcActivityCoefficientUsingUniquacModel(
 ): [ActivityCoefficientResult, Record<string, unknown>, ExcessGibbsResult] {
   void pressure;
   void temperature;
-  void componentKey;
   void mixtureKey;
   void separatorSymbol;
   void delimiter;
   void verbose;
-  const { names, moleFraction } = normalizeComponents(components);
+  const { names, moleFraction } = normalizeComponents(components, componentKey);
   const model = new UNIQUAC(names);
   return model.cal({ mole_fraction: moleFraction, tau_ij, r_i, q_i }, message);
 }
@@ -172,12 +361,12 @@ export function calcActivityCoefficient(
     const dg_ij = kwargs.dg_ij as Record<string, number> | undefined;
     const alpha_ij =
       (kwargs.alpha_ij as Record<string, number> | undefined) ??
-      maybeExtractActivityParams(normalizedModelSource, mixtureId, ["alpha_ij", "alpha"]);
+      maybeExtractActivityParams(normalizedModelSource, mixtureId, ["alpha_ij", "alpha"], components, componentKey, "matrix");
     if (!tau_ij && dg_ij) {
       const converted = calcTauIjWithDgIjUsingNrtlModel(components, temperature, dg_ij, { mixture_delimiter: "|" });
       tau_ij = converted.tau_ij_comp;
     }
-    if (!tau_ij) tau_ij = maybeExtractActivityParams(normalizedModelSource, mixtureId, ["tau_ij", "tau"]);
+    if (!tau_ij) tau_ij = maybeExtractActivityParams(normalizedModelSource, mixtureId, ["tau_ij", "tau"], components, componentKey, "matrix");
     if (!tau_ij || !alpha_ij) {
       throw new ThermoModelError("NRTL requires tau_ij+alpha_ij (or dg_ij+alpha_ij)", "INVALID_ACTIVITY_INPUT");
     }
@@ -202,9 +391,13 @@ export function calcActivityCoefficient(
     const converted = calcTauIjWithDUijUsingUniquacModel(components, temperature, dU_ij, { mixture_delimiter: "|" });
     tau_ij = converted.tau_ij_comp;
   }
-  if (!tau_ij) tau_ij = maybeExtractActivityParams(normalizedModelSource, mixtureId, ["tau_ij", "tau"]);
-  const r_i = (kwargs.r_i as Record<string, number> | undefined) ?? maybeExtractActivityParams(normalizedModelSource, mixtureId, ["r_i", "r"]);
-  const q_i = (kwargs.q_i as Record<string, number> | undefined) ?? maybeExtractActivityParams(normalizedModelSource, mixtureId, ["q_i", "q"]);
+  if (!tau_ij) tau_ij = maybeExtractActivityParams(normalizedModelSource, mixtureId, ["tau_ij", "tau"], components, componentKey, "matrix");
+  const r_i =
+    (kwargs.r_i as Record<string, number> | undefined) ??
+    maybeExtractActivityParams(normalizedModelSource, mixtureId, ["r_i", "r"], components, componentKey, "vector");
+  const q_i =
+    (kwargs.q_i as Record<string, number> | undefined) ??
+    maybeExtractActivityParams(normalizedModelSource, mixtureId, ["q_i", "q"], components, componentKey, "vector");
   if (!tau_ij || !r_i || !q_i) {
     throw new ThermoModelError("UNIQUAC requires tau_ij+r_i+q_i (or dU_ij+r_i+q_i)", "INVALID_ACTIVITY_INPUT");
   }
