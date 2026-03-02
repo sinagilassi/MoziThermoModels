@@ -23,6 +23,13 @@ type ModelInput = {
   temperature?: [number, string];
 };
 
+type ComponentDataMap = Record<string, { value: number; unit: string; symbol?: string }>;
+type EosComponentDataSource = Record<string, ComponentDataMap>;
+
+function toEosComponentDataSource(dataSource: DataSource): EosComponentDataSource {
+  return dataSource as unknown as EosComponentDataSource;
+}
+
 /**
  * Core EOS execution service for parsing inputs, root analysis, and fugacity calculations.
  *
@@ -83,7 +90,7 @@ export class EosCore {
     liquidFugacityMode: LiquidFugacityMode = "EOS",
     kwargs: Record<string, unknown> = {}
   ): ComponentGasFugacityResult {
-    const datasource = getDataSource(modelSource);
+    const datasource = toEosComponentDataSource(getDataSource(modelSource));
     const equationsource = getEquationSource(modelSource);
     const eos_model = normalizeEosModelName(modelName);
     const phase = (modelInput.phase?.toUpperCase?.() as PhaseName | undefined) ?? undefined;
@@ -163,7 +170,7 @@ export class EosCore {
     modelSource: ModelSource,
     kwargs: Record<string, unknown> = {}
   ): ComponentEosRootResult {
-    const datasource = getDataSource(modelSource);
+    const datasource = toEosComponentDataSource(getDataSource(modelSource));
     const equationsource = getEquationSource(modelSource);
     const component = modelInput.component?.trim();
     if (!component) throw new ThermoModelError("Component name is not provided", "MISSING_COMPONENT");
@@ -210,7 +217,7 @@ export class EosCore {
     solverMethod: SolverMethod = "ls",
     kwargs: Record<string, unknown> = {}
   ): MixtureFugacityResult {
-    const datasource = getDataSource(modelSource);
+    const datasource = toEosComponentDataSource(getDataSource(modelSource));
     const equationsource = getEquationSource(modelSource);
     const eos_model = normalizeEosModelName(modelName);
     if (!modelInput.pressure || !modelInput.temperature) throw new ThermoModelError("Missing operating conditions", "MISSING_OPERATING_CONDITIONS");
@@ -288,7 +295,7 @@ export class EosCore {
     modelSource: ModelSource,
     kwargs: Record<string, unknown> = {}
   ): MixtureEosRootResult {
-    const datasource = getDataSource(modelSource);
+    const datasource = toEosComponentDataSource(getDataSource(modelSource));
     const equationsource = getEquationSource(modelSource);
 
     // >> check required fields

@@ -1,4 +1,4 @@
-import { ThermoModelError } from "../core";
+import { ThermoModelError } from "../errors";
 
 export type UnifacGroupInfo = {
   name?: string;
@@ -161,4 +161,3 @@ export class UNIFAC1 {
     ] as const;
   }
 }
-

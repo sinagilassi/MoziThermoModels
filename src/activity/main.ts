@@ -1,4 +1,4 @@
-import { ThermoModelError } from "@/core";
+import { ThermoModelError } from "@/errors";
 import type { Component, ComponentKey, Temperature } from "@/types";
 import { NRTL } from "./nrtl";
 import { UNIQUAC } from "./uniquac";
@@ -120,4 +120,3 @@ export const calc_tau_ij_with_dg_ij_using_nrtl_model = calcTauIjWithDgIjUsingNrt
 export const calc_dU_ij_using_uniquac_model = calcDUijUsingUniquacModel;
 export const calc_tau_ij_with_dU_ij_using_uniquac_model = calcTauIjWithDUijUsingUniquacModel;
 export const calc_tau_ij_by_coefficients = calcTauIjByCoefficients;
-

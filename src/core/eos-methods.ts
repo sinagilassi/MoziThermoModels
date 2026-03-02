@@ -13,15 +13,14 @@ import type {
   Component
 } from "../types";
 import { ThermoModelCore } from "../docs/thermomodelcore";
-import {
-  parseComponentEosRootResult,
-  parseGasFugacityCalcResult,
-  parseLiquidFugacityCalcResult,
-  parseMixtureEosRootResult,
-  parseMixtureFugacityCalcResult,
-} from "./index";
 import { validateComponent, validatePressure, validateTemperature, normalizeModelSource, setFeedSpecification } from "@/utils";
 import { ThermoModelError } from "@/errors";
+
+const parseComponentEosRootResult = (res: ComponentEosRootResult): ComponentEosRootResult => res;
+const parseGasFugacityCalcResult = (res: ComponentGasFugacityResult): ComponentGasFugacityResult => res;
+const parseLiquidFugacityCalcResult = (res: ComponentGasFugacityResult): ComponentGasFugacityResult => res;
+const parseMixtureEosRootResult = (res: MixtureEosRootResult): MixtureEosRootResult => res;
+const parseMixtureFugacityCalcResult = (res: MixtureFugacityResult): MixtureFugacityResult => res;
 
 
 /**

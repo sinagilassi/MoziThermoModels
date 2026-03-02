@@ -1,4 +1,4 @@
-import { ThermoModelError } from "@/core";
+import { ThermoModelError } from "@/errors";
 import {
   selectRootsByAnalysis,
   solveByFsolveLikeMultiStart,

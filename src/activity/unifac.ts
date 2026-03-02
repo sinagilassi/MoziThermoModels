@@ -1,4 +1,4 @@
-import { ThermoModelError } from "../core";
+import { ThermoModelError } from "../errors";
 import { generalExcessMolarGibbsFreeEnergy, normalizeFractionMap, parseModelInputObject, toKelvin } from "./_shared";
 import { UNIFAC1, type UnifacComponentGroupCounts, type UnifacGroupData, type UnifacInteractionData } from "./unifac1";
 
@@ -106,4 +106,3 @@ export class UNIFAC {
     return { "1": { "1": 0 } };
   }
 }
-

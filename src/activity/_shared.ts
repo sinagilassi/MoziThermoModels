@@ -10,7 +10,14 @@ import type {
   Pressure,
   Temperature
 } from "@/types";
-import { createMixtureId, setComponentId, ThermoModelError } from "@/core";
+import { create_mixture_id, set_component_id } from "mozithermodb-settings";
+import { ThermoModelError } from "@/errors";
+
+const setComponentId = (component: ComponentLike, componentKey: ComponentKey = "Name-State") =>
+  set_component_id(component as any, componentKey as any);
+
+const createMixtureId = (components: Component[], mixtureKey: MixtureKey = "Name", delimiter = "|") =>
+  create_mixture_id(components as any, mixtureKey as any, delimiter);
 
 export const R_ACTIVITY = 8.314462618;
 
@@ -192,4 +199,3 @@ export function modelSourceMixtureId(
 ): string {
   return createMixtureId(components, mixtureKey, delimiter);
 }
-

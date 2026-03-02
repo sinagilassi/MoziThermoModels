@@ -1,4 +1,4 @@
-import { ThermoModelError } from "@/core";
+import { ThermoModelError } from "@/errors";
 
 /**
  * Round a numeric value to a fixed decimal precision.

@@ -1,5 +1,5 @@
 import { convertFromTo } from "mozicuc";
-import { ThermoModelError } from "@/core";
+import { ThermoModelError } from "@/errors";
 import type { EosModelName, LiquidFugacityMode, PhaseName } from "@/types";
 import { EOSManager } from "./eosmanager";
 import { EOSUtils } from "./eosutils";

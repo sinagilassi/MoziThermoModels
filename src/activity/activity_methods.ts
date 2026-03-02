@@ -10,7 +10,8 @@ import type {
   Pressure,
   Temperature
 } from "@/types";
-import { createMixtureId, setComponentId, ThermoModelError } from "@/core";
+import { create_mixture_id, set_component_id } from "mozithermodb-settings";
+import { ThermoModelError } from "@/errors";
 import { normalizeModelSource, validateComponent, validatePressure, validateTemperature } from "@/utils";
 import { normalizeComponents } from "./_shared";
 import { NRTL } from "./nrtl";
@@ -19,6 +20,12 @@ import {
   calcTauIjWithDgIjUsingNrtlModel,
   calcTauIjWithDUijUsingUniquacModel
 } from "./main";
+
+const setComponentId = (component: Component, componentKey: ComponentKey = "Name-State") =>
+  set_component_id(component as any, componentKey as any);
+
+const createMixtureId = (components: Component[], mixtureKey: MixtureKey = "Name", delimiter = "|") =>
+  create_mixture_id(components as any, mixtureKey as any, delimiter);
 
 /**
  * Attempts to extract activity-model parameter maps for a specific mixture.

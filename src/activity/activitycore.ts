@@ -1,5 +1,5 @@
 import type { Component, ExcessGibbsResult } from "../types";
-import { ThermoModelError } from "../core";
+import { ThermoModelError } from "../errors";
 import { generalExcessMolarGibbsFreeEnergy } from "./_shared";
 import { NRTL } from "./nrtl";
 import { UNIQUAC } from "./uniquac";
@@ -119,4 +119,3 @@ export class ActivityCore {
 // SECTION: Set types
 export type ActivityModel = NRTL | UNIQUAC | UNIFAC;
 export type ActivityCoreComponent = Component;
-
