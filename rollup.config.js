@@ -5,6 +5,8 @@ import dts from "rollup-plugin-dts";
 import tsconfigPaths from "rollup-plugin-tsconfig-paths";
 import pkg from "./package.json" with { type: "json" };
 
+const extensions = [".mjs", ".js", ".json", ".ts"];
+
 const externalDeps = new Set([
     ...Object.keys(pkg.dependencies ?? {}),
     ...Object.keys(pkg.peerDependencies ?? {}),
@@ -13,25 +15,36 @@ const externalDeps = new Set([
 ]);
 
 const isExternal = (id) => {
-    if (id.startsWith(".") || id.startsWith("/") || id.startsWith("@/")) {
+    if (id.startsWith("\0")) {
         return false;
     }
 
-    const [scopeOrName, maybeName] = id.split("/");
+    const cleanId = id.split("?")[0].split("#")[0];
+
+    if (cleanId.startsWith(".") || cleanId.startsWith("/") || cleanId.startsWith("@/")) {
+        return false;
+    }
+
+    if (cleanId.startsWith("node:")) {
+        return true;
+    }
+
+    const [scopeOrName, maybeName] = cleanId.split("/");
     const packageName = scopeOrName.startsWith("@") && maybeName
         ? `${scopeOrName}/${maybeName}`
         : scopeOrName;
 
-    return externalDeps.has(id) || externalDeps.has(packageName);
+    return externalDeps.has(cleanId) || externalDeps.has(packageName);
 };
 
-const jsPlugins = [
+const baseJsPlugins = [
     tsconfigPaths(),
-    nodeResolve({ extensions: [".mjs", ".js", ".json", ".ts"] }),
+    nodeResolve({ extensions }),
     typescript({
         tsconfig: "./tsconfig.json",
         declaration: false,
         declarationMap: false,
+        noEmitOnError: true,
     }),
 ];
 
@@ -39,7 +52,7 @@ export default [
     {
         input: "src/index.ts",
         external: isExternal,
-        plugins: jsPlugins,
+        plugins: baseJsPlugins,
         output: [
             {
                 file: "dist/index.mjs",
@@ -52,12 +65,26 @@ export default [
                 exports: "named",
                 sourcemap: true,
             },
-            {
-                file: "dist/index.browser.mjs",
-                format: "es",
-                sourcemap: true,
-            },
         ],
+    },
+    {
+        input: "src/index.ts",
+        external: isExternal,
+        plugins: [
+            tsconfigPaths(),
+            nodeResolve({ extensions, browser: true, preferBuiltins: false }),
+            typescript({
+                tsconfig: "./tsconfig.json",
+                declaration: false,
+                declarationMap: false,
+                noEmitOnError: true,
+            }),
+        ],
+        output: {
+            file: "dist/index.browser.mjs",
+            format: "es",
+            sourcemap: true,
+        },
     },
     {
         input: "src/index.ts",
