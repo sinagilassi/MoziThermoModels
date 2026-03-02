@@ -1,5 +1,5 @@
-import type { Component, ComponentKey, Temperature } from "../types";
-import { ThermoModelError } from "../core";
+import { ThermoModelError } from "@/core";
+import type { Component, ComponentKey, Temperature } from "@/types";
 import { NRTL } from "./nrtl";
 import { UNIQUAC } from "./uniquac";
 import { remapPairDictKeys, toKelvin } from "./_shared";
@@ -8,13 +8,7 @@ export type PairOrMatrix = Record<string, number> | number[][];
 
 type PairUpdateOptions = {
   mixture_delimiter?: "|" | "_";
-  component_key?:
-    | "Name"
-    | "Formula"
-    | "Name-State"
-    | "Formula-State"
-    | "Name-Formula-State"
-    | "Formula-Name-State";
+  component_key?: ComponentKey;
   component_delimiter?: string;
 };
 

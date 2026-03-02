@@ -1,3 +1,4 @@
+// import libs
 import type {
   ActivityCoefficientResult,
   Component,
@@ -7,8 +8,8 @@ import type {
   ModelSource,
   Pressure,
   Temperature
-} from "../types";
-import { createMixtureId, ThermoModelError } from "../core";
+} from "@/types";
+import { createMixtureId, ThermoModelError } from "@/core";
 import { normalizeModelSource, validateComponent, validatePressure, validateTemperature } from "@/utils";
 import { normalizeComponents } from "./_shared";
 import { NRTL } from "./nrtl";
@@ -18,6 +19,13 @@ import {
   calcTauIjWithDUijUsingUniquacModel
 } from "./main";
 
+/**
+ * Attempts to extract activity-model parameter maps for a specific mixture.
+ *
+ * It looks up `mixtureId` inside the normalized model source data and matches
+ * any of the provided `keys` case-insensitively. When a matching object is
+ * found, values are coerced to numbers.
+ */
 function maybeExtractActivityParams(
   modelSource: ModelSource,
   mixtureId: string,
@@ -43,6 +51,22 @@ function maybeExtractActivityParams(
   return undefined;
 }
 
+/**
+ * Calculates activity coefficients and excess Gibbs free energy using NRTL.
+ *
+ * @param components Mixture components with mole-fraction information.
+ * @param pressure System pressure (validated upstream; unused in this helper).
+ * @param temperature System temperature (validated upstream; unused in this helper).
+ * @param tau_ij Binary NRTL interaction parameter map.
+ * @param alpha_ij Binary NRTL non-randomness parameter map.
+ * @param componentKey Component identity format used across model tooling.
+ * @param mixtureKey Mixture identity strategy used across model tooling.
+ * @param separatorSymbol Component name/state separator.
+ * @param delimiter Pair key delimiter for binary parameters.
+ * @param message Optional message propagated to model output.
+ * @param verbose Enables verbose behavior in higher-level flows.
+ * @returns Tuple of activity coefficients, raw details, and excess Gibbs result.
+ */
 export function calcActivityCoefficientUsingNrtlModel(
   components: Component[],
   pressure: Pressure,
@@ -68,6 +92,23 @@ export function calcActivityCoefficientUsingNrtlModel(
   return model.cal({ mole_fraction: moleFraction, tau_ij, alpha_ij }, message);
 }
 
+/**
+ * Calculates activity coefficients and excess Gibbs free energy using UNIQUAC.
+ *
+ * @param components Mixture components with mole-fraction information.
+ * @param pressure System pressure (validated upstream; unused in this helper).
+ * @param temperature System temperature (validated upstream; unused in this helper).
+ * @param tau_ij Binary UNIQUAC interaction parameter map.
+ * @param r_i UNIQUAC component volume parameters.
+ * @param q_i UNIQUAC component surface-area parameters.
+ * @param componentKey Component identity format used across model tooling.
+ * @param mixtureKey Mixture identity strategy used across model tooling.
+ * @param separatorSymbol Component name/state separator.
+ * @param delimiter Pair key delimiter for binary parameters.
+ * @param message Optional message propagated to model output.
+ * @param verbose Enables verbose behavior in higher-level flows.
+ * @returns Tuple of activity coefficients, raw details, and excess Gibbs result.
+ */
 export function calcActivityCoefficientUsingUniquacModel(
   components: Component[],
   pressure: Pressure,
@@ -94,6 +135,17 @@ export function calcActivityCoefficientUsingUniquacModel(
   return model.cal({ mole_fraction: moleFraction, tau_ij, r_i, q_i }, message);
 }
 
+/**
+ * Unified activity-coefficient entry point for NRTL and UNIQUAC models.
+ *
+ * The function validates inputs, resolves/normalizes model parameters from
+ * `kwargs` and/or `modelSource`, performs optional parameter conversions
+ * (`dg_ij -> tau_ij` for NRTL, `dU_ij -> tau_ij` for UNIQUAC), and delegates
+ * to the corresponding model-specific calculator.
+ *
+ * @throws {ThermoModelError} When components are invalid or required
+ * parameters for the selected model are missing.
+ */
 export function calcActivityCoefficient(
   components: Component[],
   pressure: Pressure,

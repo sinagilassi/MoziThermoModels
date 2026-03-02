@@ -114,7 +114,9 @@ export function generalExcessMolarGibbsFreeEnergy(
   let names: string[];
   let x: number[];
   let gamma: number[];
+
   if (Array.isArray(mole_fraction) && Array.isArray(activity_coefficients)) {
+    // TODO: mole fraction key is based on "componentKey"
     names = mole_fraction.map((_, i) => `component_${i + 1}`);
     x = mole_fraction.map(Number);
     gamma = activity_coefficients.map(Number);
@@ -166,13 +168,7 @@ export function remapPairDictKeys(
   pairDict: PairDict,
   components: Component[],
   mixtureDelimiter: "|" | "_" = "|",
-  componentKey:
-    | "Name"
-    | "Formula"
-    | "Name-State"
-    | "Formula-State"
-    | "Name-Formula-State"
-    | "Formula-Name-State" = "Name",
+  componentKey: ComponentKey = "Name",
   componentDelimiter = "-"
 ): PairDict {
   const byName = new Map(components.map((c) => [String(c.name).trim().toLowerCase(), c] as const));
