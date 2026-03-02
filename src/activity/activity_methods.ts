@@ -44,14 +44,15 @@ function maybeExtractActivityParams(
 
   for (const target of keys) {
     const value = findParamValue(node, [target]);
-    if (value == null) continue;
-
     if (targetKind === "vector") {
-      const vectorRecord = extractVectorByComponentKey(value, components, componentKey);
+      const vectorRecord = value == null ? undefined : extractVectorByComponentKey(value, components, componentKey);
       if (vectorRecord) return vectorRecord;
+      const componentVectorRecord = extractVectorFromComponentNodes(raw as Record<string, unknown>, components, componentKey, [target]);
+      if (componentVectorRecord) return componentVectorRecord;
       continue;
     }
 
+    if (value == null) continue;
     const matrixRecord = extractFromMoziMatrixData(value, target, mixtureId, components, componentKey);
     if (matrixRecord) return matrixRecord;
 
@@ -123,9 +124,20 @@ function findMixtureNode(
 }
 
 function findParamValue(node: Record<string, unknown>, keys: string[]): unknown {
-  const targetNormSet = new Set(keys.map((key) => normalizeMatrixSymbolKey(key)));
+  const targetNormSet = new Set<string>();
+  const targetCompactSet = new Set<string>();
+
+  for (const key of keys) {
+    for (const alias of matrixSymbolCandidates(key)) {
+      targetNormSet.add(normalizeMatrixSymbolKey(alias));
+      targetCompactSet.add(compactMatrixSymbolKey(alias));
+    }
+  }
+
   for (const [key, value] of Object.entries(node)) {
-    if (targetNormSet.has(normalizeMatrixSymbolKey(key))) return value;
+    const normalized = normalizeMatrixSymbolKey(key);
+    if (targetNormSet.has(normalized)) return value;
+    if (targetCompactSet.has(compactMatrixSymbolKey(key))) return value;
   }
   return undefined;
 }
@@ -176,6 +188,11 @@ function normalizeMatrixSymbolKey(key: string): string {
     .trim()
     .toLowerCase()
     .replace(/[_\s]+/g, "_");
+}
+
+function compactMatrixSymbolKey(key: string): string {
+  const normalized = normalizeMatrixSymbolKey(key);
+  return normalized.replace(/_i_j$/i, "").replace(/_ij$/i, "");
 }
 
 function matrixSymbolCandidates(targetKey: string): string[] {
@@ -240,6 +257,45 @@ function extractVectorByComponentKey(
   }
 
   return out;
+}
+
+function extractVectorFromComponentNodes(
+  dataSource: Record<string, unknown>,
+  components: Component[],
+  componentKey: ComponentKey,
+  propKeys: string[]
+): Record<string, number> | undefined {
+  const out: Record<string, number> = {};
+
+  for (const component of components) {
+    const componentId = setComponentId(component, componentKey);
+    const node = dataSource[componentId];
+    if (!node || typeof node !== "object" || Array.isArray(node)) return undefined;
+
+    const value = findParamValue(node as Record<string, unknown>, propKeys);
+    const scalar = coerceScalarValue(value);
+    if (!Number.isFinite(scalar)) return undefined;
+    out[componentId] = scalar;
+  }
+
+  return out;
+}
+
+function coerceScalarValue(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return Number.NaN;
+
+  const rec = value as Record<string, unknown>;
+  if ("value" in rec) {
+    const parsed = Number(rec.value);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  }
+
+  return Number.NaN;
 }
 
 /**
