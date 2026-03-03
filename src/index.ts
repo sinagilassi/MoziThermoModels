@@ -1,5 +1,7 @@
 import * as mz from "mozithermodb";
 
+// SECTION: Exports
+export * from "./app";
 export * from "mozithermodb";
 export * from "./types";
 export * from "./configs";

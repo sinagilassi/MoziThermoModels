@@ -1,5 +1,5 @@
 // ! MoziThermoModels
-import { calcActivityCoefficientUsingNrtlModel } from "mozithermomodels";
+import { calcActivityCoefficientUsingNrtlModel, activity, activities } from "mozithermomodels";
 import { Component } from "mozithermodb-settings";
 
 
