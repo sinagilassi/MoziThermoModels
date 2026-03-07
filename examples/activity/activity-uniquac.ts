@@ -1,5 +1,5 @@
 // ! MoziThermoModels
-import { calcActivityCoefficientUsingUniquacModel } from "../src";
+import { calcActivityCoefficientUsingUniquacModel } from "../../src";
 
 console.log(calcActivityCoefficientUsingUniquacModel(
   [

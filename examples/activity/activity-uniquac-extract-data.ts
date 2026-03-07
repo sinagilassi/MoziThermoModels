@@ -1,6 +1,6 @@
 // ! MoziThermoModels
-import { buildBinaryMixtureData, buildComponentData, calcActivityCoefficient } from "../src";
-import type { RawThermoRecord } from "../src";
+import { buildBinaryMixtureData, buildComponentData, calcActivityCoefficient } from "../../src";
+import type { RawThermoRecord } from "../../src";
 
 const components = [
     { name: "ethanol", formula: "C2H5OH", state: "l", mole_fraction: 0.4 },
