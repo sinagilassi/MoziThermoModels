@@ -199,6 +199,8 @@ Runtime metadata:
 
 - EOS single-component gas fugacity: `examples/eos-single-gas.ts`
 - EOS single-component liquid fugacity: `examples/eos-single-liquid.ts`
+- EOS pure-component auto/phase-mode fugacity: `examples/eos/eos-calc-fugacity.ts`
+- EOS pure-component fugacity aliases: `examples/eos/eos-calc-fugacity-aliases.ts`
 - EOS mixture fugacity: `examples/eos-mixture.ts`
 - EOS single-component roots: `examples/eos-root-single.ts`
 - EOS mixture roots: `examples/eos-root-mixture.ts`
