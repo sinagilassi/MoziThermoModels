@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildComponentData, buildComponentEquation, calcGasFugacity, checkComponentEosRoots, createEq } from "../index";
+import { buildComponentData, buildComponentEquation, calcFugacity, calcGasFugacity, checkComponentEosRoots, createEq } from "../index";
 import type { Component, ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "../types";
 
 type P = "A" | "B" | "C" | "D" | "E";
@@ -43,6 +43,15 @@ const modelSource = (() => {
   };
 })();
 
+function vaporPressureAt(T: number): number {
+  const A = 59.078;
+  const B = -3492.6;
+  const C = -6.0669;
+  const D = 1.0919e-5;
+  const E = 2;
+  return Math.exp(A + B / T + C * Math.log(T) + D * T ** E);
+}
+
 describe("eos", () => {
   it("checks root result shape", () => {
     const res = checkComponentEosRoots(
@@ -66,5 +75,106 @@ describe("eos", () => {
     );
     const phase = Object.keys(res.results)[0];
     expect(res.results[phase].fugacity.value).toBeGreaterThan(0);
+  });
+
+  it("calcFugacity gas mode handles subcritical vapor-like condition", () => {
+    const res = calcFugacity({
+      component: propane,
+      pressure: { value: 9, unit: "bar" },
+      temperature: { value: 300.1, unit: "K" },
+      modelSource,
+      modelName: "PR",
+      phaseMode: "gas"
+    });
+    expect(res.results.VAPOR).toBeDefined();
+    expect(Number((res.results.VAPOR.fugacity as { value: number }).value)).toBeGreaterThan(0);
+  });
+
+  it("calcFugacity liquid mode handles subcritical liquid-like condition", () => {
+    const res = calcFugacity({
+      component: propane,
+      pressure: { value: 11, unit: "bar" },
+      temperature: { value: 300.1, unit: "K" },
+      modelSource,
+      modelName: "PR",
+      phaseMode: "liquid"
+    });
+    expect(res.results.LIQUID).toBeDefined();
+    expect(Number((res.results.LIQUID.fugacity as { value: number }).value)).toBeGreaterThan(0);
+  });
+
+  it("calcFugacity both mode returns vapor and liquid candidates in ambiguous subcritical region", () => {
+    const T = 300.1;
+    const Psat = vaporPressureAt(T);
+    const res = calcFugacity({
+      component: propane,
+      pressure: { value: Psat, unit: "Pa" },
+      temperature: { value: T, unit: "K" },
+      modelSource,
+      modelName: "PR",
+      phaseMode: "both",
+      tolerance: 1
+    });
+
+    expect(res.results.LIQUID).toBeDefined();
+    expect(res.results.VAPOR).toBeDefined();
+    expect((res.results.LIQUID.roots ?? []).length).toBeLessThanOrEqual(2);
+    expect((res.results.VAPOR.roots ?? []).length).toBeLessThanOrEqual(2);
+    expect(res.results.LIQUID.selected_root).not.toBe(res.results.VAPOR.selected_root);
+  });
+
+  it("calcFugacity auto mode handles supercritical condition", () => {
+    const res = calcFugacity({
+      component: propane,
+      pressure: { value: 50, unit: "bar" },
+      temperature: { value: 400, unit: "K" },
+      modelSource,
+      modelName: "PR",
+      phaseMode: "auto"
+    });
+    const phase = Object.keys(res.results)[0];
+    expect(["SUPERCRITICAL", "VAPOR"]).toContain(phase);
+  });
+
+  it("calcFugacity rejects invalid phaseMode", () => {
+    expect(() =>
+      calcFugacity({
+        component: propane,
+        pressure: { value: 10, unit: "bar" },
+        temperature: { value: 300.1, unit: "K" },
+        modelSource,
+        modelName: "PR",
+        phaseMode: "bad" as any
+      })
+    ).toThrow("Invalid phaseMode");
+  });
+
+  it("calcFugacity remains robust near critical conditions", () => {
+    const res = calcFugacity({
+      component: propane,
+      pressure: { value: 42.48e5, unit: "Pa" },
+      temperature: { value: 369.83, unit: "K" },
+      modelSource,
+      modelName: "PR",
+      phaseMode: "auto",
+      criticalTolerance: { temperature: 1e-5, pressure: 1 }
+    });
+    expect(Object.keys(res.results).length).toBeGreaterThanOrEqual(1);
+    expect(res.message).toBeDefined();
+    expect(res.diagnostics).toBeDefined();
+  });
+
+  it("calcFugacity honors solverMethod option", () => {
+    const res = calcFugacity({
+      component: propane,
+      pressure: { value: 10, unit: "bar" },
+      temperature: { value: 300.1, unit: "K" },
+      modelSource,
+      modelName: "PR",
+      phaseMode: "gas",
+      solverMethod: "root"
+    });
+    const phase = Object.keys(res.results)[0];
+    expect(res.results[phase].solver_method).toBe("root");
   });
 });

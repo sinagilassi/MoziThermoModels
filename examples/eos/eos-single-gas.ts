@@ -3,7 +3,7 @@ import { createEq, buildComponentEquation } from "mozithermodb";
 import { buildComponentData } from "mozithermodb";
 import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "mozithermodb";
 // ! MoziThermoModels
-import { calcGasFugacity } from "../src";
+import { calcGasFugacity } from "../../src";
 
 type P = "A" | "B" | "C" | "D" | "E";
 type A = "T";

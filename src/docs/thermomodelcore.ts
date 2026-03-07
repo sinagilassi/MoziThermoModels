@@ -1,9 +1,9 @@
 import type { ModelSource } from "mozithermodb";
-import { ThermoModelError } from "@/errors";
-import type { Component, EosModelName, LiquidFugacityMode, SolverMethod } from "../types";
-import { EosCore } from "../eos/eoscore";
-import { ActivityCore } from "../activity/activitycore";
-import { calcActivityCoefficient as calcActivityCoefficientActivity } from "../activity/activity_methods";
+// ! LOCALS
+import type { Component, EosModelName, LiquidFugacityMode, SolverMethod } from "@/types";
+import { EosCore } from "@/eos/eoscore";
+import { ActivityCore } from "@/activity/activitycore";
+import { calcActivityCoefficient as calcActivityCoefficientActivity } from "@/activity/activity_methods";
 import { normalizeModelSource } from "@/utils";
 
 /**

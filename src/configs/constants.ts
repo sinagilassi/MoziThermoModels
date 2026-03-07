@@ -1,3 +1,4 @@
+// SECTION: Constants
 export const PENG_ROBINSON = "PR";
 export const SOAVE_REDLICH_KWONG = "SRK";
 export const REDLICH_KWONG = "RK";

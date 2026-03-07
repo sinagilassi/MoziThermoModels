@@ -1,18 +1,23 @@
 import type { ModelSource } from "mozithermodb";
 import { set_component_id } from "mozithermodb-settings";
+// ! LOCALS
 import type {
   ComponentKey,
   ComponentEosRootResult,
   ComponentGasFugacityResult,
   ComponentLiquidFugacityResult,
   EosModelName,
+  FugacityPhaseMode,
   MixtureEosRootResult,
   MixtureFugacityResult,
+  PhaseName,
   Pressure,
+  PureComponentFugacityInput,
+  RootAnalysisEntry,
   Temperature,
-  Component
-} from "../types";
-import { ThermoModelCore } from "../docs/thermomodelcore";
+  Component,
+} from "@/types";
+import { ThermoModelCore } from "@/docs/thermomodelcore";
 import { validateComponent, validatePressure, validateTemperature, normalizeModelSource, setFeedSpecification } from "@/utils";
 import { ThermoModelError } from "@/errors";
 
@@ -22,6 +27,100 @@ const parseLiquidFugacityCalcResult = (res: ComponentGasFugacityResult): Compone
 const parseMixtureEosRootResult = (res: MixtureEosRootResult): MixtureEosRootResult => res;
 const parseMixtureFugacityCalcResult = (res: MixtureFugacityResult): MixtureFugacityResult => res;
 
+type Preclassification = "supercritical" | "gas-like-single-phase" | "subcritical" | "critical";
+
+type ClassifiedPhaseInfo = {
+  preclassification: Preclassification;
+  rootPhase: PhaseName;
+  rootAnalysisId: number;
+  rootAnalysisEntry?: RootAnalysisEntry;
+  critical: { temperature?: number; pressure?: number };
+  operating: { temperature: number; pressure: number };
+  isAmbiguousSubcritical: boolean;
+  recommendedPhase: "VAPOR" | "LIQUID" | "SUPERCRITICAL" | "CRITICAL";
+  message: string;
+};
+
+function phaseModeOrDefault(mode: FugacityPhaseMode | undefined): FugacityPhaseMode {
+  const resolved = (mode ?? "auto").toLowerCase();
+  if (resolved === "auto" || resolved === "gas" || resolved === "liquid" || resolved === "both") return resolved;
+  throw new ThermoModelError(`Invalid phaseMode: ${String(mode)}`, "INVALID_PHASE_MODE");
+}
+
+function classifyPureComponentPhase(
+  root: ComponentEosRootResult,
+  criticalTolerance: { temperature?: number; pressure?: number } = {}
+): ClassifiedPhaseInfo {
+  const row = root.root_analysis?.[0];
+  const T = Number(root.temperature?.value ?? NaN);
+  const P = Number(root.pressure?.value ?? NaN);
+  const Tc = Number(row?.critical_temperature?.value ?? NaN);
+  const Pc = Number(row?.critical_pressure?.value ?? NaN);
+  const tolT = Number(criticalTolerance.temperature ?? 1e-6);
+  const tolP = Number(criticalTolerance.pressure ?? 1e-3);
+
+  const tAbove = Number.isFinite(T) && Number.isFinite(Tc) ? T > Tc + tolT : false;
+  const tBelow = Number.isFinite(T) && Number.isFinite(Tc) ? T < Tc - tolT : false;
+  const pAbove = Number.isFinite(P) && Number.isFinite(Pc) ? P > Pc + tolP : false;
+  const pBelowOrEq = Number.isFinite(P) && Number.isFinite(Pc) ? P <= Pc + tolP : false;
+
+  let preclassification: Preclassification = "subcritical";
+  if (tAbove && pAbove) preclassification = "supercritical";
+  else if (tAbove && pBelowOrEq) preclassification = "gas-like-single-phase";
+  else if (!tAbove && !tBelow) preclassification = "critical";
+
+  const rootAnalysisId = Number(row?.root_analysis ?? -1);
+  const rootPhase = root.phase;
+  const isAmbiguousSubcritical = preclassification === "subcritical" && rootAnalysisId === 1;
+
+  let recommendedPhase: "VAPOR" | "LIQUID" | "SUPERCRITICAL" | "CRITICAL" = "VAPOR";
+  if (preclassification === "supercritical") recommendedPhase = "SUPERCRITICAL";
+  else if (rootPhase === "LIQUID") recommendedPhase = "LIQUID";
+  else if (rootPhase === "CRITICAL" || preclassification === "critical") recommendedPhase = "CRITICAL";
+  else if (rootPhase === "SUPERCRITICAL") recommendedPhase = "SUPERCRITICAL";
+
+  return {
+    preclassification,
+    rootPhase,
+    rootAnalysisId,
+    rootAnalysisEntry: row,
+    critical: {
+      temperature: Number.isFinite(Tc) ? Tc : undefined,
+      pressure: Number.isFinite(Pc) ? Pc : undefined
+    },
+    operating: { temperature: T, pressure: P },
+    isAmbiguousSubcritical,
+    recommendedPhase,
+    message: `preclassification=${preclassification}; rootPhase=${rootPhase}; rootAnalysis=${rootAnalysisId}`
+  };
+}
+
+function mergePhaseResults(
+  gas: ComponentGasFugacityResult,
+  liquid: ComponentGasFugacityResult,
+  message: string,
+  diagnostics: Record<string, unknown>
+): ComponentGasFugacityResult {
+  return {
+    component: gas.component,
+    pressure: gas.pressure,
+    temperature: gas.temperature,
+    results: {
+      ...liquid.results,
+      ...gas.results
+    },
+    message,
+    diagnostics
+  };
+}
+
+function withDiagnostics(
+  res: ComponentGasFugacityResult,
+  message: string,
+  diagnostics: Record<string, unknown>
+): ComponentGasFugacityResult {
+  return { ...res, message, diagnostics };
+}
 
 /**
  * Analyze EOS root behavior for a single component at a given pressure/temperature.
@@ -70,6 +169,128 @@ export function checkComponentEosRoots(
 }
 
 /**
+ * Calculate pure-component fugacity with automatic phase orchestration.
+ *
+ * This high-level API wraps existing low-level EOS calls (`checkComponentEosRoots`,
+ * `calcGasFugacity`, `calcLiquidFugacity`) and selects execution flow based on:
+ * - operating state (`T`, `P`) versus critical properties (`Tc`, `Pc`)
+ * - EOS root-analysis classification
+ * - requested `phaseMode`
+ *
+ * Phase-mode behavior:
+ * - `"gas"`: force vapor-like branch (`SUPERCRITICAL` phase is used when preclassified as supercritical).
+ * - `"liquid"`: force liquid-like branch.
+ * - `"both"`: return both vapor/liquid candidates only for ambiguous subcritical states (`root_analysis === 1`);
+ *   otherwise collapse to a single physically consistent branch.
+ * - `"auto"`: supercritical single-phase when above critical region, single-phase when unambiguous,
+ *   and both candidates in ambiguous subcritical region.
+ *
+ * Numerical options are shared for all candidate evaluations (single solver configuration), and
+ * no hidden stability winner (`fL` vs `fV`) is applied in this wrapper.
+ *
+ * @param component Component definition (`name`, `formula`, `state`, ...).
+ * @param pressure Operating pressure with unit.
+ * @param temperature Operating temperature with unit.
+ * @param modelSource MoziThermoDB-compatible source (`dataSource`, `equationSource`).
+ * @param modelName EOS model (`"SRK" | "PR" | "RK" | "vdW"`). Defaults to `"SRK"`.
+ * @param componentKey Component-id strategy for source lookup. Defaults to `"Name-State"`.
+ * @param phaseMode Phase orchestration mode. Defaults to `"auto"`.
+ * @param solverMethod Numerical root-solver method. Defaults to `"ls"`.
+ * @param tolerance Root-analysis tolerance forwarded to lower EOS analysis.
+ * @param criticalTolerance Critical-region tolerance overrides (`temperature`, `pressure`).
+ * @param liquidFugacityMode Liquid fugacity mode (`"EOS"` or `"Poynting"`). Defaults to `"EOS"`.
+ * @returns Single-component fugacity payload with one or two phase entries in `results`,
+ * plus informative top-level `message` and `diagnostics`.
+ * @throws {ThermoModelError} `INVALID_INPUT` for malformed input object.
+ * @throws {ThermoModelError} `INVALID_PHASE_MODE` for unsupported `phaseMode`.
+ */
+export function calcFugacity({
+  component,
+  pressure,
+  temperature,
+  modelSource,
+  modelName = "SRK",
+  componentKey = "Name-State",
+  phaseMode,
+  solverMethod = "ls",
+  tolerance,
+  criticalTolerance,
+  liquidFugacityMode = "EOS"
+}: PureComponentFugacityInput): ComponentGasFugacityResult {
+  if (!component || !pressure || !temperature || !modelSource) {
+    throw new ThermoModelError("input must include component, pressure, temperature, and modelSource", "INVALID_INPUT");
+  }
+
+  const resolvedMode = phaseModeOrDefault(phaseMode);
+  const sharedOptions: Record<string, unknown> = {
+    solver_method: solverMethod,
+    liquid_fugacity_mode: liquidFugacityMode
+  };
+  if (typeof tolerance === "number") sharedOptions.tolerance = tolerance;
+
+  const root = checkComponentEosRoots(
+    component,
+    pressure,
+    temperature,
+    modelSource,
+    modelName,
+    componentKey,
+    typeof tolerance === "number" ? { tolerance } : {}
+  );
+
+  const classified = classifyPureComponentPhase(root, criticalTolerance);
+  const diagnostics = {
+    phase_mode: resolvedMode,
+    solver_method: solverMethod,
+    liquid_fugacity_mode: liquidFugacityMode,
+    tolerance: tolerance ?? null,
+    critical_tolerance: {
+      temperature: criticalTolerance?.temperature ?? 1e-6,
+      pressure: criticalTolerance?.pressure ?? 1e-3
+    },
+    classification: classified
+  };
+
+  const callGas = (phase: "VAPOR" | "SUPERCRITICAL" | "CRITICAL") =>
+    calcGasFugacity(component, pressure, temperature, modelSource, modelName, componentKey, { ...sharedOptions, phase });
+  const callLiquid = () =>
+    calcLiquidFugacity(component, pressure, temperature, modelSource, modelName, componentKey, { ...sharedOptions, phase: "LIQUID" });
+
+  if (resolvedMode === "gas") {
+    const phase = classified.preclassification === "supercritical" ? "SUPERCRITICAL" : "VAPOR";
+    return withDiagnostics(callGas(phase), `Forced gas mode resolved with phase=${phase}`, diagnostics);
+  }
+
+  if (resolvedMode === "liquid") {
+    return withDiagnostics(callLiquid(), "Forced liquid mode resolved with phase=LIQUID", diagnostics);
+  }
+
+  if (resolvedMode === "both") {
+    if (classified.isAmbiguousSubcritical) {
+      const gas = callGas("VAPOR");
+      const liquid = callLiquid();
+      return mergePhaseResults(gas, liquid, "Ambiguous subcritical region detected; returning both vapor-like and liquid-like candidates.", diagnostics);
+    }
+    const phase = classified.recommendedPhase;
+    const single = phase === "LIQUID" ? callLiquid() : callGas(phase);
+    return withDiagnostics(single, `phaseMode=both collapsed to single-phase (${phase}) because the EOS root analysis is not ambiguous.`, diagnostics);
+  }
+
+  if (classified.preclassification === "supercritical") {
+    return withDiagnostics(callGas("SUPERCRITICAL"), "Auto mode selected supercritical single-phase branch.", diagnostics);
+  }
+  if (classified.isAmbiguousSubcritical) {
+    const gas = callGas("VAPOR");
+    const liquid = callLiquid();
+    return mergePhaseResults(gas, liquid, "Auto mode detected subcritical ambiguity; returning both liquid and vapor candidates.", diagnostics);
+  }
+  if (classified.recommendedPhase === "LIQUID") {
+    return withDiagnostics(callLiquid(), "Auto mode selected liquid branch.", diagnostics);
+  }
+  return withDiagnostics(callGas(classified.recommendedPhase), `Auto mode selected ${classified.recommendedPhase} branch.`, diagnostics);
+}
+
+/**
  * Analyze EOS root behavior for a multi-component mixture at a given pressure/temperature.
  *
  * This wrapper builds a feed specification from `components[].mole_fraction` (normalized if needed),
@@ -104,29 +325,20 @@ export function checkMultiComponentEosRoots(
   componentKey: ComponentKey = "Name-State",
   kwargs: Record<string, unknown> = {}
 ): MixtureEosRootResult {
-  // SECTION: Input validation and normalization
   if (!Array.isArray(components) || components.length === 0) throw new ThermoModelError("components must be a non-empty array", "INVALID_COMPONENTS");
-
-  // NOTE: validate components and extract mole fractions, normalize feed specification in lower layer
   components.forEach(validateComponent);
-  // NOTE: validate pressure and temperature objects (value/unit), convert to SI in lower layer
   validatePressure(pressure);
   validateTemperature(temperature);
 
-  // SECTION: Build feed specification and model input, delegate to ThermoModelCore
   const feed = setFeedSpecification(Object.fromEntries(components.map((c) => [set_component_id(c as any, componentKey), Number(c.mole_fraction ?? 0)])));
 
-  // NOTE: model input includes feed specification, P/T with units, and optional phase hint forwarded from kwargs
   const modelInput = {
     "feed-specification": feed,
     pressure: [pressure.value, pressure.unit] as [number, string],
     temperature: [temperature.value, temperature.unit] as [number, string]
   };
 
-  // SECTION: Delegate to ThermoModelCore and parse result
   const core = new ThermoModelCore();
-
-  // NOTE: forward bubble/dew point mode hints in kwargs for potential use in lower layer EOS logic (currently parity options)
   return parseMixtureEosRootResult(core.checkEosRootsMultiComponent(modelName, modelInput, normalizeModelSource(modelSource), {
     ...kwargs,
     bubble_point_pressure_mode: bubblePointPressureMode,
@@ -271,10 +483,11 @@ function calcSingle(
   );
 }
 
-
-
 export const check_component_eos_roots = checkComponentEosRoots;
 export const check_multi_component_eos_roots = checkMultiComponentEosRoots;
 export const calc_gas_fugacity = calcGasFugacity;
 export const calc_liquid_fugacity = calcLiquidFugacity;
 export const calc_mixture_fugacity = calcMixtureFugacity;
+export const calFugacity = calcFugacity;
+export const calc_fugacity = calcFugacity;
+export const cal_fugacity = calcFugacity;

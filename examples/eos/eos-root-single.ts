@@ -3,7 +3,7 @@ import { createEq, buildComponentEquation } from "mozithermodb";
 import { buildComponentData } from "mozithermodb";
 import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "mozithermodb";
 // ! MoziThermoModels
-import { calcLiquidFugacity } from "../src";
+import { checkComponentEosRoots } from "../../src";
 
 type P = "A" | "B" | "C" | "D" | "E";
 type A = "T";
@@ -18,17 +18,16 @@ const params: ConfigParamMap<P> = {
 };
 const args: ConfigArgMap<A> = { T: { name: "Temperature", symbol: "T", unit: "K" } };
 const ret: ConfigRetMap<R> = { VaPr: { name: "Vapor Pressure", symbol: "VaPr", unit: "Pa" } };
-const dippr101: Eq<P, A> = (p, a) => ({
+const eq: Eq<P, A> = (p, a) => ({
   value: Math.exp(p.A.value + p.B.value / a.T.value + p.C.value * Math.log(a.T.value) + p.D.value * a.T.value ** p.E.value),
-  unit: "Pa",
-  symbol: "VaPr"
+  unit: "Pa", symbol: "VaPr"
 });
 
-const propane = { name: "propane", formula: "C3H8", state: "l", mole_fraction: 1 } as Component;
+const propane = { name: "propane", formula: "C3H8", state: "g", mole_fraction: 1 } as Component;
 const records: RawThermoRecord[] = [
   { name: "Name", symbol: "Name", value: "propane", unit: "" },
   { name: "Formula", symbol: "Formula", value: "C3H8", unit: "" },
-  { name: "State", symbol: "State", value: "l", unit: "" },
+  { name: "State", symbol: "State", value: "g", unit: "" },
   { name: "Tc", symbol: "Tc", value: 369.83, unit: "K" },
   { name: "Pc", symbol: "Pc", value: 42.48e5, unit: "Pa" },
   { name: "AcFa", symbol: "AcFa", value: 0.152, unit: "-" },
@@ -39,22 +38,20 @@ const records: RawThermoRecord[] = [
   { name: "E", symbol: "E", value: 2, unit: "-" }
 ];
 
-const eqTemplate = createEq(params, args, ret, dippr101, "Liquid Vapor Pressure (DIPPR 101)");
+const eqTemplate = createEq(params, args, ret, eq, "Liquid Vapor Pressure (DIPPR 101)");
 const modelSource = {
   dataSource: buildComponentData(propane, records, ["Name-State"], true, "Name-State"),
   equationSource: buildComponentEquation(propane, eqTemplate, records, ["Name-State"], true, "Name-State")
 };
 
-
-const res = calcLiquidFugacity(
+const res = checkComponentEosRoots(
   propane,
   { value: 10, unit: "bar" },
   { value: 300.1, unit: "K" },
   modelSource,
-  "PR",
-  "Name-State",
-  { liquid_fugacity_mode: "Poynting" }
+  "PR"
 );
 
-// log
+// log result
 console.log(JSON.stringify(res, null, 2));
+

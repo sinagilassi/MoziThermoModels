@@ -3,7 +3,7 @@ import { createEq, buildComponentsEquation } from "mozithermodb";
 import { buildComponentsData } from "mozithermodb";
 import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "mozithermodb";
 // ! MoziThermoModels
-import { checkMultiComponentEosRoots } from "../src";
+import { checkMultiComponentEosRoots } from "../../src";
 
 type P = "A" | "B" | "C" | "D" | "E";
 type A = "T";
