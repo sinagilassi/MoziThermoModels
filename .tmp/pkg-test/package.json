@@ -12,6 +12,6 @@
     "type": "commonjs",
     "dependencies": {
         "mozithermodb-settings": "^1.1.4",
-        "mozithermomodels": "file:../../mozithermomodels-0.1.1.tgz"
+        "mozithermomodels": "file:../../mozithermomodels-0.2.0.tgz"
     }
 }
