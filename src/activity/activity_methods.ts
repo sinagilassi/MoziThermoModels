@@ -16,6 +16,8 @@ import { normalizeModelSource, validateComponent, validatePressure, validateTemp
 import { normalizeComponents } from "./_shared";
 import { NRTL } from "./nrtl";
 import { UNIQUAC } from "./uniquac";
+import { UNIFAC } from "./unifac";
+import type { UnifacComponentGroupCounts, UnifacGroupData, UnifacInteractionData } from "./unifac1";
 import {
   calcTauIjWithDgIjUsingNrtlModel,
   calcTauIjWithDUijUsingUniquacModel
@@ -388,6 +390,89 @@ export function calcActivityCoefficientUsingUniquacModel(
 }
 
 /**
+ * Calculates activity coefficients (`gamma_i`) and excess Gibbs free energy
+ * (`gE`) for a liquid mixture using the UNIFAC group-contribution model.
+ *
+ * This helper is the UNIFAC-specific, direct-data execution path. It builds a
+ * model instance from normalized component identities, loads external UNIFAC
+ * datasets, registers per-component subgroup counts, then evaluates the model
+ * at the requested temperature and composition.
+ *
+ * Data expectations and behavior:
+ * - `group_data` must provide subgroup definitions and their R/Q constants.
+ * - `interaction_data` must provide subgroup interaction parameters required by
+ *   the residual contribution of UNIFAC.
+ * - `component_groups` maps each component id (built with `componentKey`) to
+ *   subgroup counts used to construct each molecule's group inventory.
+ * - `kwargs.eps`, `kwargs.z`, and `kwargs.x_eps` are optional numerical
+ *   stability/model-control knobs forwarded to the UNIFAC core.
+ *
+ * Unlike the shared NRTL/UNIQUAC extraction flow, this function does not read
+ * model parameters from `modelSource`; callers must provide complete UNIFAC
+ * datasets explicitly.
+ *
+ * @param components Mixture components including mole-fraction information.
+ * @param pressure System pressure. Included for API symmetry with other
+ * activity-model helpers; currently unused by this UNIFAC calculation path.
+ * @param temperature System temperature used in the UNIFAC evaluation.
+ * @param group_data UNIFAC subgroup property dataset (group constants).
+ * @param interaction_data UNIFAC subgroup interaction dataset.
+ * @param component_groups Per-component subgroup count mapping keyed by
+ * component id.
+ * @param componentKey Component identity format used to build names consumed by
+ * the model and to resolve `component_groups` entries.
+ * @param mixtureKey Mixture identity strategy (currently unused in this helper,
+ * preserved for API consistency).
+ * @param separatorSymbol Component name/state separator (unused in this helper,
+ * preserved for API consistency).
+ * @param delimiter Pair key delimiter (unused in this helper, preserved for API
+ * consistency).
+ * @param message Optional message placeholder kept for interface parity.
+ * @param verbose Optional verbose flag kept for interface parity.
+ * @param kwargs Optional UNIFAC runtime options.
+ * @param kwargs.eps Small numerical epsilon used by the model internals.
+ * @param kwargs.z Optional coordination-number override for combinatorial term.
+ * @param kwargs.x_eps Optional composition epsilon for mole-fraction handling.
+ * @returns A tuple containing:
+ * 1) activity-coefficient result map,
+ * 2) raw model diagnostic/details payload,
+ * 3) excess Gibbs free-energy result.
+ */
+export function calcActivityCoefficientUsingUnifacModel(
+  components: Component[],
+  pressure: Pressure,
+  temperature: Temperature,
+  group_data: UnifacGroupData,
+  interaction_data: UnifacInteractionData,
+  component_groups: Record<string, UnifacComponentGroupCounts>,
+  componentKey: ComponentKey = "Name-State",
+  mixtureKey: MixtureKey = "Name",
+  separatorSymbol = "-",
+  delimiter = "|",
+  message?: string,
+  verbose = false,
+  kwargs: Record<string, unknown> = {}
+): [ActivityCoefficientResult, Record<string, unknown>, ExcessGibbsResult] {
+  void pressure;
+  void mixtureKey;
+  void separatorSymbol;
+  void delimiter;
+  void message;
+  void verbose;
+  const { names, moleFraction } = normalizeComponents(components, componentKey);
+  const model = new UNIFAC(names);
+  model.load_data(group_data, interaction_data, {
+    eps: kwargs.eps as number | undefined,
+    z: kwargs.z as number | undefined
+  });
+  model.set_component_groups(component_groups);
+  return model.cal(
+    { mole_fraction: moleFraction, temperature },
+    { eps: kwargs.eps as number | undefined, z: kwargs.z as number | undefined, x_eps: kwargs.x_eps as number | undefined }
+  );
+}
+
+/**
  * Unified activity-coefficient entry point for NRTL and UNIQUAC models.
  *
  * The function validates inputs, resolves/normalizes model parameters from
@@ -485,4 +570,5 @@ export function calcActivityCoefficient(
 export const calc_activity_coefficient = calcActivityCoefficient;
 export const calc_activity_coefficient_using_nrtl_model = calcActivityCoefficientUsingNrtlModel;
 export const calc_activity_coefficient_using_uniquac_model = calcActivityCoefficientUsingUniquacModel;
+export const calc_activity_coefficient_using_unifac_model = calcActivityCoefficientUsingUnifacModel;
 

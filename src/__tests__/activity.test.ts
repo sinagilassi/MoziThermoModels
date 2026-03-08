@@ -3,8 +3,10 @@ import {
   buildBinaryMixtureData,
   calcActivityCoefficient,
   calcActivityCoefficientUsingNrtlModel,
+  calcActivityCoefficientUsingUnifacModel,
   calcActivityCoefficientUsingUniquacModel,
-  MoziMatrixData
+  MoziMatrixData,
+  UNIFAC
 } from "../index";
 
 function buildMatrixRows(
@@ -33,6 +35,16 @@ function buildMatrixRows(
 }
 
 describe("activity", () => {
+  const unifacGroupData = {
+    "1": { main_group: 1, name: "CH3", R: 0.9011, Q: 0.848 },
+    "2": { main_group: 1, name: "CH2", R: 0.6744, Q: 0.54 },
+    "18": { main_group: 9, name: "CH3CO", R: 1.6724, Q: 1.488 }
+  };
+  const unifacInteractionData = {
+    "1": { "1": 0, "9": 476.4 },
+    "9": { "1": 26.76, "9": 0 }
+  };
+
   it("nrtl returns positive gamma values", () => {
     const [res] = calcActivityCoefficientUsingNrtlModel(
       [
@@ -351,5 +363,107 @@ describe("activity", () => {
     } catch (error) {
       expect((error as any).code).toBe("INVALID_ACTIVITY_INPUT");
     }
+  });
+
+  it("UNIFAC direct model workflow computes gamma using group-name component groups", () => {
+    const model = new UNIFAC(["acetone-l", "n_heptane-l"]);
+    model.load_data(unifacGroupData as any, unifacInteractionData as any);
+    model.set_component_groups({
+      "acetone-l": { CH3: 1, CH3CO: 1 },
+      "n_heptane-l": { CH3: 2, CH2: 3 }
+    });
+
+    const [res, other] = model.cal({
+      mole_fraction: { "acetone-l": 0.047, "n_heptane-l": 0.953 },
+      temperature: [307, "K"]
+    });
+
+    expect(Object.values(res.value).every((v) => v > 0)).toBe(true);
+    expect(res.value["acetone-l"]).toBeGreaterThan(res.value["n_heptane-l"]);
+    expect((other as any).calculation_mode).toBe("UNIFAC");
+  });
+
+  it("UNIFAC direct model workflow supports subgroup-id component groups", () => {
+    const model = new UNIFAC(["acetone-l", "n_heptane-l"]);
+    model.load_data(unifacGroupData as any, unifacInteractionData as any);
+    model.set_component_groups({
+      "acetone-l": { "1": 1, "18": 1 },
+      "n_heptane-l": { "1": 2, "2": 3 }
+    });
+
+    const [res] = model.cal({
+      mole_fraction: { "acetone-l": 0.047, "n_heptane-l": 0.953 },
+      temperature: [307, "K"]
+    });
+
+    expect(Object.values(res.value).every((v) => v > 0)).toBe(true);
+  });
+
+  it("UNIFAC direct model workflow uses main-group interaction directionality", () => {
+    const model = new UNIFAC(["comp_a-l", "comp_b-l"]);
+    model.load_data(
+      {
+        "101": { main_group: 1, name: "GA", R: 1, Q: 1 },
+        "202": { main_group: 2, name: "GB", R: 1, Q: 1 }
+      } as any,
+      {
+        "1": { "1": 0, "2": 900 },
+        "2": { "1": 0, "2": 0 }
+      } as any
+    );
+    model.set_component_groups({
+      "comp_a-l": { "101": 1 },
+      "comp_b-l": { "202": 1 }
+    });
+
+    const [res] = model.cal({
+      mole_fraction: { "comp_a-l": 0.5, "comp_b-l": 0.5 },
+      temperature: [298.15, "K"]
+    });
+
+    expect(Math.abs(res.value["comp_a-l"] - res.value["comp_b-l"])).toBeGreaterThan(1e-8);
+  });
+
+  it("calcActivityCoefficient rejects UNIFAC model name", () => {
+    const components: Array<{ name: string; formula: string; state: "l"; mole_fraction: number }> = [
+      { name: "acetone", formula: "C3H6O", state: "l", mole_fraction: 0.047 },
+      { name: "n_heptane", formula: "C7H16", state: "l", mole_fraction: 0.953 }
+    ];
+
+    expect(() =>
+      calcActivityCoefficient(
+        components,
+        { value: 1, unit: "bar" },
+        { value: 307, unit: "K" },
+        { dataSource: {}, equationSource: {} } as any,
+        "UNIFAC" as any
+      )
+    ).toThrowError(/Unsupported activity model: UNIFAC/);
+  });
+
+  it("calcActivityCoefficientUsingUnifacModel computes gamma with explicit group datasets", () => {
+    const components: Array<{ name: string; formula: string; state: "l"; mole_fraction: number }> = [
+      { name: "acetone", formula: "C3H6O", state: "l", mole_fraction: 0.047 },
+      { name: "n_heptane", formula: "C7H16", state: "l", mole_fraction: 0.953 }
+    ];
+
+    const [res, other] = calcActivityCoefficientUsingUnifacModel(
+      components,
+      { value: 1, unit: "bar" },
+      { value: 307, unit: "K" },
+      unifacGroupData as any,
+      unifacInteractionData as any,
+      {
+        "acetone-l": { CH3: 1, CH3CO: 1 },
+        "n_heptane-l": { CH3: 2, CH2: 3 }
+      },
+      "Name-State",
+      "Name",
+      "-",
+      "|"
+    );
+
+    expect(Object.values(res.value).every((v) => v > 0)).toBe(true);
+    expect((other as any).calculation_mode).toBe("UNIFAC");
   });
 });

@@ -9,6 +9,7 @@ export * from "./core";
 export * from "./docs";
 export * from "./eos";
 export * from "./activity";
+export { loadUnifacDataFromJson } from "./utils/unifac-tools";
 
 type LooseComponent = {
   name: string;

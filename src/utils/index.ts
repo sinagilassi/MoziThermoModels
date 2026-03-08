@@ -2,3 +2,4 @@
 export * from "./tools";
 export * from "./validation-tools";
 export * from "./eos-tools";
+export * from "./unifac-tools";
