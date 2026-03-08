@@ -1,31 +1,44 @@
+// import libs
+import { Component, Temperature, Pressure } from "mozithermodb-settings";
 // ! MoziThermoModels
 import { calcActivityCoefficientUsingUnifacModel } from "../../src";
-import { loadUnifacDataFromJson } from "../../src";
+import { loadUnifacDataFromJson, UnifacModelGroupData, UnifacModelInteractionData, UnifacComponentGroup } from "../../src";
 // ! LOCALS
 // NOTE: Unifac data
-import groupParametersJson from "../../externals/unifac/unifac-group-parameters.json";
-import interactionMatrixJson from "../../externals/unifac/unifac-interaction-matrix.json";
+import { UNIFAC_GROUP_PARAMETERS_TS } from "../../externals/unifac/unifac-group-parameters";
+import { UNIFAC_INTERACTION_MATRIX_TS } from "../../externals/unifac/unifac-interaction-matrix";
 
-const components = [
+// NOTE: Component
+const components: Component[] = [
     { name: "acetone", formula: "C3H6O", state: "l", mole_fraction: 0.047 },
     { name: "n_heptane", formula: "C7H16", state: "l", mole_fraction: 0.953 }
-] as const;
+];
 
+// NOTE: Load UNIFAC data
 const { groupData, interactionData } = loadUnifacDataFromJson(
-    groupParametersJson as any,
-    interactionMatrixJson as any
+    UNIFAC_GROUP_PARAMETERS_TS as any,
+    UNIFAC_INTERACTION_MATRIX_TS as any
 );
+
+// NOTE: Component group data
+const componentGroups: UnifacComponentGroup = {
+    "acetone-C3H6O": { CH3: 1, CH3CO: 1 },
+    "n_heptane-C7H16": { CH3: 2, CH2: 3 }
+};
+
+// NOTE: Calculate activity coefficients and excess Gibbs energy using UNIFAC model
+// ! temperature
+const temperature: Temperature = { value: 307, unit: "K" };
+// ! pressure (not used in UNIFAC but included for completeness)
+const pressure: Pressure = { value: 1, unit: "bar" };
 
 const [result, other, gEx] = calcActivityCoefficientUsingUnifacModel(
     [...components] as any,
-    { value: 1, unit: "bar" },
-    { value: 307, unit: "K" },
-    groupData as any,
-    interactionData as any,
-    {
-        "acetone-C3H6O": { CH3: 1, CH3CO: 1 },
-        "n_heptane-C7H16": { CH3: 2, CH2: 3 }
-    },
+    pressure,
+    temperature,
+    groupData as UnifacModelGroupData,
+    interactionData as UnifacModelInteractionData,
+    componentGroups,
     "Name-Formula",
     "Name",
     "-",

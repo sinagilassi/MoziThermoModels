@@ -29,6 +29,10 @@ const setComponentId = (component: Component, componentKey: ComponentKey = "Name
 const createMixtureId = (components: Component[], mixtureKey: MixtureKey = "Name", delimiter = "|") =>
   create_mixture_id(components as any, mixtureKey as any, delimiter);
 
+
+// NOTE: Component group data map
+export type UnifacComponentGroup = Record<string, UnifacComponentGroupCounts>
+
 /**
  * Attempts to extract activity-model parameter maps for a specific mixture.
  *
@@ -444,7 +448,7 @@ export function calcActivityCoefficientUsingUnifacModel(
   temperature: Temperature,
   group_data: UnifacGroupData,
   interaction_data: UnifacInteractionData,
-  component_groups: Record<string, UnifacComponentGroupCounts>,
+  component_groups: UnifacComponentGroup,
   componentKey: ComponentKey = "Name-State",
   mixtureKey: MixtureKey = "Name",
   separatorSymbol = "-",
