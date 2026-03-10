@@ -15,6 +15,9 @@ export {
   type UnifacModelInteractionData,
 } from "./utils";
 
+// NOTE: eos eq solver
+export * from "./core/main";
+
 type LooseComponent = {
   name: string;
   formula: string;

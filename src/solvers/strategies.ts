@@ -3,14 +3,27 @@ import { fsolveLikeScalar, leastSquaresScalar, newtonScalar } from "./scalar";
 import type { MultiStartOptions, ScalarFunctionContext, SolverRunResult } from "./types";
 import { buildRootSearchWindows, linspace, normalizeRootCandidates } from "./utils";
 
+type RootNormalizationOptions = {
+  positiveOnly?: boolean;
+  roundDecimals?: number;
+  dedupeTol?: number;
+};
+
 /**
  * Solve a cubic polynomial using the analytic cubic solver and normalize the real roots.
  *
  * @param coeff Polynomial coefficients as `[a, b, c, d]` for `ax^3 + bx^2 + cx + d = 0`.
+ * @param normalizeOptions Root normalization controls.
  * @returns Solver run result with method set to `"root"`.
  */
-export function solveByPolynomialRoots(coeff: [number, number, number, number]): SolverRunResult {
-  const roots = normalizeRootCandidates(solveCubicRealRoots(coeff[0], coeff[1], coeff[2], coeff[3]));
+export function solveByPolynomialRoots(
+  coeff: [number, number, number, number],
+  normalizeOptions: RootNormalizationOptions = {}
+): SolverRunResult {
+  const roots = normalizeRootCandidates(
+    solveCubicRealRoots(coeff[0], coeff[1], coeff[2], coeff[3]),
+    normalizeOptions
+  );
   return { roots, solver_method: "root" };
 }
 
@@ -20,14 +33,18 @@ export function solveByPolynomialRoots(coeff: [number, number, number, number]):
  * @typeParam T Context object type passed into `target.fn`.
  * @param target Function context containing residual function and immutable context.
  * @param options Multi-start and convergence options.
+ * @param normalizeOptions Root normalization controls.
  * @returns Aggregated solver result with normalized roots and diagnostics.
  */
 export function solveByNewtonMultiStart<T>(
   target: ScalarFunctionContext<T>,
-  options: MultiStartOptions = {}
+  options: MultiStartOptions = {},
+  normalizeOptions: RootNormalizationOptions = {}
 ): SolverRunResult {
   const guessNo = options.guessNo ?? 50;
-  const guesses = linspace(1e-5, 2, guessNo);
+  const guessMin = options.bounds?.[0] ?? 1e-5;
+  const guessMax = options.bounds?.[1] ?? 2;
+  const guesses = linspace(guessMin, guessMax, guessNo);
   const roots: number[] = [];
   let iterations = 0;
   let successCount = 0;
@@ -42,10 +59,10 @@ export function solveByNewtonMultiStart<T>(
   }
 
   return {
-    roots: normalizeRootCandidates(roots),
+    roots: normalizeRootCandidates(roots, normalizeOptions),
     solver_method: "newton",
     iterations,
-    diagnostics: { guessNo, successCount }
+    diagnostics: { guessNo, guessMin, guessMax, successCount }
   };
 }
 
@@ -57,14 +74,18 @@ export function solveByNewtonMultiStart<T>(
  * @typeParam T Context object type passed into `target.fn`.
  * @param target Function context containing residual function and immutable context.
  * @param options Multi-start and convergence options.
+ * @param normalizeOptions Root normalization controls.
  * @returns Aggregated solver result with normalized roots and diagnostics.
  */
 export function solveByFsolveLikeMultiStart<T>(
   target: ScalarFunctionContext<T>,
-  options: MultiStartOptions = {}
+  options: MultiStartOptions = {},
+  normalizeOptions: RootNormalizationOptions = {}
 ): SolverRunResult {
   const guessNo = options.guessNo ?? 50;
-  const guesses = linspace(1e-5, 2, guessNo);
+  const guessMin = options.bounds?.[0] ?? 1e-5;
+  const guessMax = options.bounds?.[1] ?? 2;
+  const guesses = linspace(guessMin, guessMax, guessNo);
   const roots: number[] = [];
   let iterations = 0;
   let successCount = 0;
@@ -79,10 +100,10 @@ export function solveByFsolveLikeMultiStart<T>(
   }
 
   return {
-    roots: normalizeRootCandidates(roots),
+    roots: normalizeRootCandidates(roots, normalizeOptions),
     solver_method: "fsolve",
     iterations,
-    diagnostics: { guessNo, successCount }
+    diagnostics: { guessNo, guessMin, guessMax, successCount }
   };
 }
 
@@ -93,12 +114,14 @@ export function solveByFsolveLikeMultiStart<T>(
  * @param rootId Root-analysis selector used to define search windows.
  * @param target Function context containing residual function and immutable context.
  * @param options Multi-start and convergence options.
+ * @param normalizeOptions Root normalization controls.
  * @returns Aggregated solver result with normalized roots and diagnostics.
  */
 export function solveByLeastSquaresMultiStart<T>(
   rootId: number,
   target: ScalarFunctionContext<T>,
-  options: MultiStartOptions = {}
+  options: MultiStartOptions = {},
+  normalizeOptions: RootNormalizationOptions = {}
 ): SolverRunResult {
   const guessNo = options.guessNo ?? 50;
   const windows = buildRootSearchWindows(rootId, guessNo, options.bounds ?? [-2, 5, 0.5]);
@@ -116,7 +139,7 @@ export function solveByLeastSquaresMultiStart<T>(
   }
 
   return {
-    roots: normalizeRootCandidates(roots),
+    roots: normalizeRootCandidates(roots, normalizeOptions),
     solver_method: "ls",
     iterations,
     diagnostics: { guessNo, successCount, rootId }
