@@ -116,6 +116,42 @@ export class EosCore {
     const P = convertFromTo(Number(modelInput.pressure[0]), String(modelInput.pressure[1]), "Pa");
     const T = convertFromTo(Number(modelInput.temperature[0]), String(modelInput.temperature[1]), "K");
     const phaseKey = String(fug.phase ?? phaseResolved) as PhaseName;
+
+    if (
+      phaseKey === "VAPOR-LIQUID" &&
+      fug &&
+      typeof fug === "object" &&
+      "phases" in fug &&
+      fug.phases &&
+      typeof fug.phases === "object"
+    ) {
+      const phaseResults: Record<string, any> = {};
+      for (const candidate of ["LIQUID", "VAPOR"] as const) {
+        const candidateRes = (fug.phases as Record<string, any>)[candidate];
+        if (!candidateRes) continue;
+        const phiVal = typeof candidateRes.phi === "number" ? candidateRes.phi : 1;
+        const fVal = typeof candidateRes.fugacity === "number" ? candidateRes.fugacity : phiVal * P;
+        phaseResults[candidate] = {
+          phase: candidate,
+          compressibility_factor: { value: Number(candidateRes.Z), unit: "-", symbol: "Z" },
+          fugacity_coefficient: { value: Number(phiVal), unit: "-", symbol: "phi" },
+          fugacity: { value: Number(fVal), unit: "Pa", symbol: "f" },
+          selected_root: Number(candidateRes.Z),
+          roots: Array.isArray(candidateRes.roots) ? candidateRes.roots.map(Number) : undefined,
+          solver_method: String(candidateRes.solver_method ?? solverMethod),
+          calculation_mode: String(candidateRes.calculation_mode ?? "single"),
+          message: typeof candidateRes.solver_note === "string" ? candidateRes.solver_note : undefined
+        };
+      }
+
+      return {
+        component,
+        pressure: { value: P, unit: "Pa", symbol: "P" },
+        temperature: { value: T, unit: "K", symbol: "T" },
+        results: phaseResults
+      };
+    }
+
     const phiVal = typeof fug.phi === "number" ? fug.phi : 1;
     const fVal = typeof fug.fugacity === "number" ? fug.fugacity : phiVal * P;
 

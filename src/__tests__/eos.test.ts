@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildComponentData, buildComponentEquation, calcFugacity, calcGasFugacity, checkComponentEosRoots, createEq } from "../index";
+import { buildComponentData, buildComponentEquation, buildComponentsData, buildComponentsEquation, calcFugacity, calcGasFugacity, calcMixtureFugacity, checkComponentEosRoots, createEq } from "../index";
 import type { Component, ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "../types";
 
 type P = "A" | "B" | "C" | "D" | "E";
@@ -43,6 +43,46 @@ const modelSource = (() => {
   };
 })();
 
+const co2: Component = { name: "CO2", formula: "CO2", state: "g", mole_fraction: 0.15 };
+const nButane: Component = { name: "n-butane", formula: "C4H10", state: "g", mole_fraction: 0.85 };
+const mixtureComponents: Component[] = [co2, nButane];
+
+const co2Records: RawThermoRecord[] = [
+  { name: "Name", symbol: "Name", value: "CO2", unit: "" },
+  { name: "Formula", symbol: "Formula", value: "CO2", unit: "" },
+  { name: "State", symbol: "State", value: "g", unit: "" },
+  { name: "Tc", symbol: "Tc", value: 304.13, unit: "K" },
+  { name: "Pc", symbol: "Pc", value: 73.77e5, unit: "Pa" },
+  { name: "AcFa", symbol: "AcFa", value: 0.225, unit: "-" },
+  { name: "A", symbol: "A", value: 20.0, unit: "-" },
+  { name: "B", symbol: "B", value: -1800, unit: "K" },
+  { name: "C", symbol: "C", value: 0, unit: "-" },
+  { name: "D", symbol: "D", value: 0, unit: "1/K^E" },
+  { name: "E", symbol: "E", value: 1, unit: "-" }
+];
+
+const nButaneRecords: RawThermoRecord[] = [
+  { name: "Name", symbol: "Name", value: "n-butane", unit: "" },
+  { name: "Formula", symbol: "Formula", value: "C4H10", unit: "" },
+  { name: "State", symbol: "State", value: "g", unit: "" },
+  { name: "Tc", symbol: "Tc", value: 425.12, unit: "K" },
+  { name: "Pc", symbol: "Pc", value: 37.96e5, unit: "Pa" },
+  { name: "AcFa", symbol: "AcFa", value: 0.2, unit: "-" },
+  { name: "A", symbol: "A", value: 25.0, unit: "-" },
+  { name: "B", symbol: "B", value: -2500, unit: "K" },
+  { name: "C", symbol: "C", value: 0, unit: "-" },
+  { name: "D", symbol: "D", value: 0, unit: "1/K^E" },
+  { name: "E", symbol: "E", value: 1, unit: "-" }
+];
+
+const mixtureModelSource = (() => {
+  const tpl = createEq(params, args, ret, eq, "DIPPR 101");
+  return {
+    dataSource: buildComponentsData(mixtureComponents, [co2Records, nButaneRecords], ["Name-State"], true, "Name-State"),
+    equationSource: buildComponentsEquation(mixtureComponents, tpl, [co2Records, nButaneRecords], ["Name-State"], true, "Name-State")
+  };
+})();
+
 function vaporPressureAt(T: number): number {
   const A = 59.078;
   const B = -3492.6;
@@ -75,6 +115,54 @@ describe("eos", () => {
     );
     const phase = Object.keys(res.results)[0];
     expect(res.results[phase].fugacity.value).toBeGreaterThan(0);
+  });
+
+  it("returns both liquid and vapor results for explicit single-component VAPOR-LIQUID phase", () => {
+    const res = calcGasFugacity(
+      propane,
+      { value: 10, unit: "bar" },
+      { value: 300.1, unit: "K" },
+      modelSource,
+      "PR",
+      "Name-State",
+      { phase: "VAPOR-LIQUID" }
+    );
+
+    expect(res.results.LIQUID).toBeDefined();
+    expect(res.results.VAPOR).toBeDefined();
+    expect(Number(res.results.LIQUID.selected_root)).toBeLessThan(Number(res.results.VAPOR.selected_root));
+  });
+
+  it("uses minimum selected root for liquid mixture EOS mode", () => {
+    const res = calcMixtureFugacity(
+      mixtureComponents,
+      { value: 10, unit: "bar" },
+      { value: 300.1, unit: "K" },
+      mixtureModelSource,
+      "PR",
+      "Name-State",
+      { phase: "LIQUID", liquid_fugacity_mode: "EOS" }
+    );
+
+    const liquid = res.results.LIQUID;
+    expect(liquid).toBeDefined();
+    const roots = liquid.roots ?? [];
+    expect(roots.length).toBeGreaterThan(0);
+    expect(Number(liquid.selected_root)).toBeCloseTo(Math.min(...roots), 10);
+  });
+
+  it("throws not implemented for liquid mixture Poynting mode", () => {
+    expect(() =>
+      calcMixtureFugacity(
+        mixtureComponents,
+        { value: 10, unit: "bar" },
+        { value: 300.1, unit: "K" },
+        mixtureModelSource,
+        "PR",
+        "Name-State",
+        { phase: "LIQUID", liquid_fugacity_mode: "Poynting" }
+      )
+    ).toThrow("Liquid fugacity calculation method for the mixture mode is not available");
   });
 
   it("calcFugacity gas mode handles subcritical vapor-like condition", () => {
@@ -176,5 +264,25 @@ describe("eos", () => {
     });
     const phase = Object.keys(res.results)[0];
     expect(res.results[phase].solver_method).toBe("root");
+  });
+
+  it("selects max root for vapor branch in ambiguous subcritical region", () => {
+    const T = 300.1;
+    const Psat = vaporPressureAt(T);
+    const res = calcGasFugacity(
+      propane,
+      { value: Psat, unit: "Pa" },
+      { value: T, unit: "K" },
+      modelSource,
+      "PR",
+      "Name-State",
+      { phase: "VAPOR" }
+    );
+
+    const vapor = res.results.VAPOR;
+    const roots = vapor.roots ?? [];
+    expect(roots.length).toBeGreaterThan(0);
+    expect(Number(vapor.selected_root)).toBeCloseTo(Math.max(...roots), 10);
+    expect(Number((vapor.fugacity as { value: number }).value)).toBeGreaterThan(0);
   });
 });

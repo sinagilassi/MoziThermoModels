@@ -63,18 +63,68 @@ export class FugacityCore extends EOSManager {
     throw new ThermoModelError(`Invalid phase: ${phase}`, "INVALID_PHASE");
   }
 
-  fugacityCal(yi: number[], solverMethod: string) {
+  fugacityCal(yi: number[], solverMethod: string): any {
     if (this.phase === "SOLID") return this.solidFugacity();
-    if (this.phase === "LIQUID" && this.system_type === "SINGLE" && this.liquid_fugacity_calculation_method === "Poynting") {
-      return this.liquidFugacity({ yi, solver_method: solverMethod, root_analysis_set: this.root_analysis_set });
+
+    if (this.phase === "VAPOR-LIQUID" && this.system_type === "SINGLE") {
+      return this.vaporLiquidSingleFugacity(yi, solverMethod);
     }
-    return this.gasFugacity(yi, { solver_method: solverMethod, root_analysis_set: this.root_analysis_set });
+
+    if (this.phase === "VAPOR" || this.phase === "SUPERCRITICAL" || this.phase === "CRITICAL") {
+      return this.gasFugacity(yi, {
+        solver_method: solverMethod,
+        root_analysis_set: this.root_analysis_set
+      });
+    }
+
+    if (this.phase === "LIQUID" && this.system_type === "SINGLE") {
+      if (this.liquid_fugacity_calculation_method === "Poynting") {
+        return this.liquidFugacity({
+          yi,
+          solver_method: solverMethod,
+          root_analysis_set: this.root_analysis_set
+        });
+      }
+      return this.gasFugacity(yi, {
+        solver_method: solverMethod,
+        root_analysis_set: 2,
+        phase_override: "LIQUID"
+      });
+    }
+
+    if (this.phase === "LIQUID" && this.system_type === "MIXTURE") {
+      if (this.liquid_fugacity_calculation_method === "Poynting") {
+        return this.liquidFugacity({
+          yi,
+          solver_method: solverMethod,
+          root_analysis_set: this.root_analysis_set
+        });
+      }
+      return this.gasFugacity(yi, {
+        solver_method: solverMethod,
+        root_analysis_set: 2,
+        phase_override: "LIQUID"
+      });
+    }
+
+    if (this.phase === "VAPOR-LIQUID") {
+      return this.gasFugacity(yi, {
+        solver_method: solverMethod,
+        root_analysis_set: this.root_analysis_set
+      });
+    }
+
+    throw new ThermoModelError(`Invalid phase: ${this.phase}`, "INVALID_PHASE");
   }
 
-  gasFugacity(yi: number[] = [], kwargs: { solver_method?: string; root_analysis_set?: number } = {}) {
+  gasFugacity(
+    yi: number[] = [],
+    kwargs: { solver_method?: string; root_analysis_set?: number; phase_override?: PhaseName } = {}
+  ): any {
+    const phaseForRoot = kwargs.phase_override ?? this.phase;
     const rootAnalysis = {
       root: [kwargs.root_analysis_set ?? this.root_analysis_set],
-      phase: this.phase
+      phase: phaseForRoot
     };
     const res = this.eosFugacity({
       P: this.P,
@@ -88,7 +138,7 @@ export class FugacityCore extends EOSManager {
     });
 
     return {
-      phase: this.phase,
+      phase: phaseForRoot,
       Z: res.Z,
       roots: res.roots,
       phi: res.phi,
@@ -99,9 +149,12 @@ export class FugacityCore extends EOSManager {
     };
   }
 
-  liquidFugacity(kwargs: { yi?: number[]; solver_method?: string; root_analysis_set?: number } = {}) {
+  liquidFugacity(kwargs: { yi?: number[]; solver_method?: string; root_analysis_set?: number } = {}): any {
     if (this.components.length !== 1) {
-      return this.gasFugacity(kwargs.yi ?? [], kwargs);
+      throw new ThermoModelError(
+        "Liquid fugacity calculation method for the mixture mode is not available",
+        "NOT_IMPLEMENTED"
+      );
     }
 
     if (this.liquid_fugacity_calculation_method === "EOS") {
@@ -139,5 +192,34 @@ export class FugacityCore extends EOSManager {
 
   solidFugacity(): never {
     throw new ThermoModelError("Solid fugacity calculation is not implemented", "NOT_IMPLEMENTED");
+  }
+
+  private vaporLiquidSingleFugacity(yi: number[], solverMethod: string): any {
+    const yiSingle = yi.length ? yi : [1];
+    const liquid = this.gasFugacity(yiSingle, {
+      solver_method: solverMethod,
+      root_analysis_set: 2,
+      phase_override: "LIQUID"
+    });
+    const vapor = this.gasFugacity(yiSingle, {
+      solver_method: solverMethod,
+      root_analysis_set: 3,
+      phase_override: "VAPOR"
+    });
+
+    const roots = Array.from(new Set([...(liquid.roots ?? []), ...(vapor.roots ?? [])])).sort((a, b) => a - b);
+    const notes = [liquid.solver_note, vapor.solver_note].filter((v): v is string => typeof v === "string" && v.length > 0);
+
+    return {
+      phase: "VAPOR-LIQUID" as PhaseName,
+      phases: {
+        LIQUID: liquid,
+        VAPOR: vapor
+      },
+      roots,
+      solver_method: liquid.solver_method ?? vapor.solver_method ?? solverMethod,
+      solver_note: notes.length ? notes.join(" | ") : undefined,
+      calculation_mode: this.mode
+    };
   }
 }

@@ -135,10 +135,19 @@ export class EOSManager extends EOSModels {
 
     const roots = selectRootsByAnalysis(rootId, allRoots);
     if (!roots.length) throw new ThermoModelError("No valid EOS roots found", "EOS_ROOTS_NOT_FOUND");
-    const Z = rootId === 2 ? Math.min(...roots) : Math.max(...roots);
+    const phase = String(rootAnalysis.phase ?? "").toUpperCase();
+    const phaseAwareZ = (() => {
+      if (phase === "LIQUID") return Math.min(...roots);
+      if (phase === "VAPOR" || phase === "SUPERCRITICAL" || phase === "CRITICAL" || phase === "SOLID") return Math.max(...roots);
+      if (phase === "VAPOR-LIQUID") {
+        if (rootId === 2) return Math.min(...roots);
+        if (rootId === 3 || rootId === 4) return Math.max(...roots);
+      }
+      return rootId === 2 ? Math.min(...roots) : Math.max(...roots);
+    })();
 
     return {
-      Z,
+      Z: phaseAwareZ,
       roots,
       eos_params: params0,
       eos_params_comp: eosParamsComp,

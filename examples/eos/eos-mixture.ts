@@ -66,7 +66,11 @@ const res = calcMixtureFugacity(
   { value: 10, unit: "bar" },
   { value: 444, unit: "K" },
   modelSource,
-  "RK"
+  "RK",
+  "Name-State",
+  {
+    phase: "LIQUID",
+  }
 );
 
 // log
