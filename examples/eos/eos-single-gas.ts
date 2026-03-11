@@ -60,7 +60,8 @@ const res = calcGasFugacity(
   "SRK",
   "Name-State",
   {
-    phase: "VAPOR-LIQUID"
+    phase: "VAPOR-LIQUID",
+    solver_fallback: true,
   }
 );
 
