@@ -36,16 +36,16 @@ export function eosEqSolver(A: number, B: number, C: number, solverOptions: EosE
     if (method === "qr") return solveByQr(coeff, normalizer, solver_options ?? {});
 
     const sharedTarget = {
-      fn: (x: number, ctx: [number, number, number, number]) => (((ctx[0] * x + ctx[1]) * x + ctx[2]) * x + ctx[3]),
-      ctx: coeff
+        fn: (x: number, ctx: [number, number, number, number]) => (((ctx[0] * x + ctx[1]) * x + ctx[2]) * x + ctx[3]),
+        ctx: coeff
     };
 
     const merged = (nested?: MultiStartOptions): MultiStartOptions => ({
-      guessNo: nested?.guessNo ?? legacyOptions.guessNo,
-      bounds: nested?.bounds ?? legacyOptions.bounds,
-      maxIter: nested?.maxIter ?? legacyOptions.maxIter,
-      ftol: nested?.ftol ?? legacyOptions.ftol,
-      xtol: nested?.xtol ?? legacyOptions.xtol
+        guessNo: nested?.guessNo ?? legacyOptions.guessNo,
+        bounds: nested?.bounds ?? legacyOptions.bounds,
+        maxIter: nested?.maxIter ?? legacyOptions.maxIter,
+        ftol: nested?.ftol ?? legacyOptions.ftol,
+        xtol: nested?.xtol ?? legacyOptions.xtol
     });
 
     if (method === "ls") return solveByLeastSquaresMultiStart(4, sharedTarget, merged(solver_options?.ls as MultiStartOptions | undefined), normalizer);

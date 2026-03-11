@@ -73,6 +73,8 @@ export interface PureComponentFugacityInput {
     solverMethod?: SolverMethod;
     solverOptions?: EosSolverOptions;
     solver_options?: EosSolverOptions;
+    solverFallback?: boolean;
+    solver_fallback?: boolean;
     tolerance?: number;
     criticalTolerance?: CriticalTolerance;
     liquidFugacityMode?: LiquidFugacityMode;

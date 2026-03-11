@@ -16,6 +16,7 @@ import type {
   RootAnalysisEntry,
   Temperature,
   Component,
+  SolverMethod,
 } from "@/types";
 import { ThermoModelCore } from "@/docs/thermomodelcore";
 import { validateComponent, validatePressure, validateTemperature, normalizeModelSource, setFeedSpecification } from "@/utils";
@@ -26,6 +27,41 @@ const parseGasFugacityCalcResult = (res: ComponentGasFugacityResult): ComponentG
 const parseLiquidFugacityCalcResult = (res: ComponentGasFugacityResult): ComponentGasFugacityResult => res;
 const parseMixtureEosRootResult = (res: MixtureEosRootResult): MixtureEosRootResult => res;
 const parseMixtureFugacityCalcResult = (res: MixtureFugacityResult): MixtureFugacityResult => res;
+const SOLVER_FALLBACK_ORDER: SolverMethod[] = ["root", "qr", "ls", "newton", "fsolve"];
+
+function isSolverMethod(value: unknown): value is SolverMethod {
+  return value === "root" || value === "qr" || value === "ls" || value === "newton" || value === "fsolve";
+}
+
+function isFallbackEnabled(kwargs: Record<string, unknown>): boolean {
+  return Boolean(kwargs.solver_fallback ?? kwargs.solverFallback ?? false);
+}
+
+function preferredSolverFromKwargs(kwargs: Record<string, unknown>, fallback: SolverMethod = "ls"): SolverMethod {
+  const raw = kwargs.solver_method;
+  return isSolverMethod(raw) ? raw : fallback;
+}
+
+function runWithOptionalSolverFallback<T>(
+  kwargs: Record<string, unknown>,
+  preferredSolver: SolverMethod,
+  runner: (solverMethod: SolverMethod) => T
+): T {
+  if (!isFallbackEnabled(kwargs)) return runner(preferredSolver);
+  const errors: Array<{ method: SolverMethod; message: string }> = [];
+  for (const method of SOLVER_FALLBACK_ORDER) {
+    try {
+      return runner(method);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push({ method, message });
+    }
+  }
+  throw new ThermoModelError(
+    `All solver fallback attempts failed: ${JSON.stringify(errors)}`,
+    "EOS_ROOTS_NOT_FOUND"
+  );
+}
 
 type Preclassification = "supercritical" | "gas-like-single-phase" | "subcritical" | "critical";
 
@@ -215,6 +251,8 @@ export function calcFugacity({
   solverMethod = "ls",
   solverOptions,
   solver_options,
+  solverFallback,
+  solver_fallback,
   tolerance,
   criticalTolerance,
   liquidFugacityMode = "EOS"
@@ -229,6 +267,7 @@ export function calcFugacity({
     solver_options: solverOptions ?? solver_options,
     liquid_fugacity_mode: liquidFugacityMode
   };
+  if ((solverFallback ?? solver_fallback) === true) sharedOptions.solver_fallback = true;
   if (typeof tolerance === "number") sharedOptions.tolerance = tolerance;
 
   const root = checkComponentEosRoots(
@@ -442,17 +481,20 @@ export function calcMixtureFugacity(
   validateTemperature(temperature);
   const feed = setFeedSpecification(Object.fromEntries(components.map((c) => [set_component_id(c as any, componentKey), Number(c.mole_fraction ?? 0)])));
   const core = new ThermoModelCore();
-  const res = core.calFugacityMixture(
-    modelName,
-    {
-      "feed-specification": feed,
-      phase: (kwargs.phase as string | undefined)?.toUpperCase() ?? undefined,
-      pressure: [pressure.value, pressure.unit],
-      temperature: [temperature.value, temperature.unit]
-    },
-    normalizeModelSource(modelSource),
-    (kwargs.solver_method as any) ?? "ls",
-    kwargs
+  const preferredSolver = preferredSolverFromKwargs(kwargs, "ls");
+  const res = runWithOptionalSolverFallback(kwargs, preferredSolver, (solverMethod) =>
+    core.calFugacityMixture(
+      modelName,
+      {
+        "feed-specification": feed,
+        phase: (kwargs.phase as string | undefined)?.toUpperCase() ?? undefined,
+        pressure: [pressure.value, pressure.unit],
+        temperature: [temperature.value, temperature.unit]
+      },
+      normalizeModelSource(modelSource),
+      solverMethod,
+      kwargs
+    )
   );
   return parseMixtureFugacityCalcResult(res);
 }
@@ -471,18 +513,21 @@ function calcSingle(
   validateTemperature(temperature);
   const componentId = set_component_id(component as any, componentKey);
   const core = new ThermoModelCore();
-  return core.calFugacity(
-    modelName,
-    {
-      component: componentId,
-      phase: (kwargs.phase as string | undefined)?.toUpperCase() ?? undefined,
-      pressure: [pressure.value, pressure.unit],
-      temperature: [temperature.value, temperature.unit]
-    },
-    normalizeModelSource(modelSource),
-    (kwargs.solver_method as any) ?? "ls",
-    (kwargs.liquid_fugacity_mode as any) ?? "EOS",
-    kwargs
+  const preferredSolver = preferredSolverFromKwargs(kwargs, "ls");
+  return runWithOptionalSolverFallback(kwargs, preferredSolver, (solverMethod) =>
+    core.calFugacity(
+      modelName,
+      {
+        component: componentId,
+        phase: (kwargs.phase as string | undefined)?.toUpperCase() ?? undefined,
+        pressure: [pressure.value, pressure.unit],
+        temperature: [temperature.value, temperature.unit]
+      },
+      normalizeModelSource(modelSource),
+      solverMethod,
+      (kwargs.liquid_fugacity_mode as any) ?? "EOS",
+      kwargs
+    )
   );
 }
 

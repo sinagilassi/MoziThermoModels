@@ -3,12 +3,22 @@ import { solveByCompanionQr } from "./companion-qr";
 import { bracketRootsInWindow, fsolveLikeScalar, leastSquaresScalar, newtonScalar } from "./scalar";
 import type { EosSolverOptions, MultiStartOptions, ScalarFunctionContext, SolverRunResult } from "./types";
 import { buildRootSearchWindows, linspace, normalizeRootCandidates } from "./utils";
+import type { SolverMethod } from "@/types";
+import { ThermoModelError } from "@/errors";
 
 type RootNormalizationOptions = {
   positiveOnly?: boolean;
   roundDecimals?: number;
   dedupeTol?: number;
 };
+
+export interface SolverFallbackChainOptions {
+  order?: SolverMethod[];
+  rootIdForLs?: number;
+  solverOptions?: EosSolverOptions;
+  normalizeOptions?: RootNormalizationOptions;
+  target?: ScalarFunctionContext<[number, number, number, number]>;
+}
 
 /**
  * Solve a cubic polynomial using the analytic cubic solver and normalize the real roots.
@@ -160,4 +170,61 @@ export function solveByLeastSquaresMultiStart<T>(
       candidates: candidateDiagnostics
     }
   };
+}
+
+/**
+ * Solve a cubic with ordered fallback strategies.
+ *
+ * Default order: root -> qr -> ls -> newton -> fsolve.
+ * A method is considered failed when it throws or yields no finite roots.
+ */
+export function solveByFallbackChain(
+  coeff: [number, number, number, number],
+  options: SolverFallbackChainOptions = {}
+): SolverRunResult {
+  const order = options.order ?? ["root", "qr", "ls", "newton", "fsolve"];
+  if (!order.length) {
+    throw new ThermoModelError("Fallback chain requires at least one solver method", "INVALID_SOLVER_METHOD");
+  }
+
+  const normalizeOptions = options.normalizeOptions ?? {};
+  const solverOptions = options.solverOptions ?? {};
+  const rootIdForLs = options.rootIdForLs ?? 4;
+  const target = options.target ?? {
+    fn: (x: number, ctx: [number, number, number, number]) => (((ctx[0] * x + ctx[1]) * x + ctx[2]) * x + ctx[3]),
+    ctx: coeff
+  };
+
+  const attempts: Array<{ method: SolverMethod; ok: boolean; reason?: string }> = [];
+
+  for (const method of order) {
+    try {
+      let run: SolverRunResult;
+      if (method === "root") run = solveByPolynomialRoots(coeff, normalizeOptions);
+      else if (method === "qr") run = solveByQr(coeff, normalizeOptions, solverOptions);
+      else if (method === "ls") run = solveByLeastSquaresMultiStart(rootIdForLs, target, solverOptions.ls ?? {}, normalizeOptions);
+      else if (method === "newton") run = solveByNewtonMultiStart(target, solverOptions.newton ?? {}, normalizeOptions);
+      else run = solveByFsolveLikeMultiStart(target, solverOptions.fsolve ?? {}, normalizeOptions);
+
+      const ok = run.roots.length > 0 && run.roots.every((z) => Number.isFinite(z));
+      attempts.push({ method, ok, reason: ok ? undefined : "no valid finite roots" });
+      if (ok) {
+        return {
+          ...run,
+          diagnostics: {
+            ...(run.diagnostics ?? {}),
+            fallback: { order, selected: method, attempts }
+          }
+        };
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      attempts.push({ method, ok: false, reason });
+    }
+  }
+
+  throw new ThermoModelError(
+    `All fallback solver methods failed. attempts=${JSON.stringify(attempts)}`,
+    "EOS_ROOTS_NOT_FOUND"
+  );
 }

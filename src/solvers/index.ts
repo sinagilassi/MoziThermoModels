@@ -14,9 +14,11 @@ export {
 
 export { solveCubicRealRoots } from "./cubic";
 export { solveByCompanionQr } from "./companion-qr";
+export type { SolverFallbackChainOptions } from "./strategies";
 
 export {
   solveByFsolveLikeMultiStart,
+  solveByFallbackChain,
   solveByLeastSquaresMultiStart,
   solveByNewtonMultiStart,
   solveByPolynomialRoots,
