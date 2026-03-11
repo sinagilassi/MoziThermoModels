@@ -112,7 +112,7 @@ export class EosCore {
       { k_ij: kwargs.k_ij as number[][] | undefined }
     );
 
-    const fug = fc.fugacityCal([1], solverMethod);
+    const fug = fc.fugacityCal([1], solverMethod, (kwargs.solver_options as any) ?? {});
     const P = convertFromTo(Number(modelInput.pressure[0]), String(modelInput.pressure[1]), "Pa");
     const T = convertFromTo(Number(modelInput.temperature[0]), String(modelInput.temperature[1]), "K");
     const phaseKey = String(fug.phase ?? phaseResolved) as PhaseName;
@@ -276,7 +276,7 @@ export class EosCore {
       { k_ij: kwargs.k_ij as number[][] | undefined }
     );
 
-    const fug = fc.fugacityCal(yi, solverMethod);
+    const fug = fc.fugacityCal(yi, solverMethod, (kwargs.solver_options as any) ?? {});
     const P = convertFromTo(Number(modelInput.pressure[0]), String(modelInput.pressure[1]), "Pa");
     const T = convertFromTo(Number(modelInput.temperature[0]), String(modelInput.temperature[1]), "K");
     const phaseKey = String(fug.phase ?? phaseResolved) as PhaseName;

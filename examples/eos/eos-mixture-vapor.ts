@@ -75,10 +75,14 @@ const modelSource = {
 
 const pressure = { value: 10, unit: "bar" } as const;
 const temperature = { value: 444, unit: "K" } as const;
-const k_ij = [
-    [0, 0.18],
-    [0.18, 0]
-];
+const solver_method = "qr" as const;
+const solver_options = {
+    qr: {
+        max_iter: 300,
+        tol: 1e-12,
+        polish_newton: true
+    }
+};
 
 const roots = checkMultiComponentEosRoots(
     components,
@@ -100,7 +104,8 @@ const fugacity = calcMixtureFugacity(
     "Name-State",
     {
         phase: "VAPOR",
-        k_ij
+        solver_method,
+        solver_options
     }
 );
 

@@ -1,8 +1,7 @@
-import { set_component_id, type Component } from "mozithermodb-settings";
+import type { Component } from "mozithermodb-settings";
 import { buildComponentsData, buildComponentsEquation, createEq } from "mozithermodb";
 import type { ConfigArgMap, ConfigParamMap, ConfigRetMap, Eq, RawThermoRecord } from "mozithermodb";
 import { calcMixtureFugacity, checkMultiComponentEosRoots } from "../../src";
-import { EOSManager } from "../../src/eos";
 
 type P = "C1" | "C2" | "C3" | "C4" | "C5";
 type A = "T";
@@ -36,22 +35,23 @@ const dippr101: Eq<P, A> = (p, a) => ({
 });
 
 const components: Component[] = [
-    { name: "CO2", formula: "CO2", state: "g", mole_fraction: 0.15 },
-    { name: "n-butane", formula: "C4H10", state: "g", mole_fraction: 0.85 }
+    { name: "propane", formula: "C3H8", state: "g", mole_fraction: 0.5 },
+    { name: "n-butane", formula: "C4H10", state: "g", mole_fraction: 0.5 }
 ];
 
-const co2Records: RawThermoRecord[] = [
-    { name: "Name", symbol: "Name", value: "CO2", unit: "" },
-    { name: "Formula", symbol: "Formula", value: "CO2", unit: "" },
+// Values taken from private/PyThermoModels/examples/eos-models/fugacity-gas-inline-source.py
+const propaneRecords: RawThermoRecord[] = [
+    { name: "Name", symbol: "Name", value: "propane", unit: "" },
+    { name: "Formula", symbol: "Formula", value: "C3H8", unit: "" },
     { name: "State", symbol: "State", value: "g", unit: "" },
-    { name: "Tc", symbol: "Tc", value: 304.21, unit: "K" },
-    { name: "Pc", symbol: "Pc", value: 7.383e6, unit: "Pa" },
-    { name: "AcFa", symbol: "AcFa", value: 0.2236, unit: "-" },
-    { name: "C1", symbol: "C1", value: 140.54, unit: "-" },
-    { name: "C2", symbol: "C2", value: -4735, unit: "-" },
-    { name: "C3", symbol: "C3", value: -21.268, unit: "-" },
-    { name: "C4", symbol: "C4", value: 4.09e-2, unit: "-" },
-    { name: "C5", symbol: "C5", value: 1, unit: "-" }
+    { name: "Tc", symbol: "Tc", value: 369.83, unit: "K" },
+    { name: "Pc", symbol: "Pc", value: 4.248e6, unit: "Pa" },
+    { name: "AcFa", symbol: "AcFa", value: 0.1523, unit: "-" },
+    { name: "C1", symbol: "C1", value: 59.078, unit: "-" },
+    { name: "C2", symbol: "C2", value: -3492.6, unit: "-" },
+    { name: "C3", symbol: "C3", value: -6.0669, unit: "-" },
+    { name: "C4", symbol: "C4", value: 1.09e-5, unit: "-" },
+    { name: "C5", symbol: "C5", value: 2, unit: "-" }
 ];
 
 const nButaneRecords: RawThermoRecord[] = [
@@ -70,52 +70,39 @@ const nButaneRecords: RawThermoRecord[] = [
 
 const eqTemplate = createEq(params, args, ret, dippr101, "Liquid Vapor Pressure (DIPPR 101)");
 const modelSource = {
-    dataSource: buildComponentsData(components, [co2Records, nButaneRecords], ["Name-State"], true, "Name-State"),
-    equationSource: buildComponentsEquation(components, eqTemplate, [co2Records, nButaneRecords], ["Name-State"], true, "Name-State")
+    dataSource: buildComponentsData(components, [propaneRecords, nButaneRecords], ["Name-State"], true, "Name-State"),
+    equationSource: buildComponentsEquation(components, eqTemplate, [propaneRecords, nButaneRecords], ["Name-State"], true, "Name-State")
 };
 
-// NOTE: These operating conditions reproduce a liquid-like RK root near Python reference (~0.0345).
-const pressure = { value: 10, unit: "bar" } as const;
-const temperature = { value: 444, unit: "K" } as const;
-const solver_options = {
-    ls: {
-        guessNo: 120,
-        bounds: [-2, 5, 0.5] as [number, number, number],
-        maxIter: 250,
-        ftol: 1e-8,
-        xtol: 1e-8
-    }
-};
+const pressure = { value: 5, unit: "bar" } as const;
+const temperature = { value: 250, unit: "K" } as const;
 
 const roots = checkMultiComponentEosRoots(
     components,
     pressure,
     temperature,
     modelSource,
-    "RK",
+    "PR",
     "Raoult",
     "Raoult",
     "Name-State"
 );
-
-console.log("Roots:");
-console.log(JSON.stringify(roots, null, 2));
 
 const fugacity = calcMixtureFugacity(
     components,
     pressure,
     temperature,
     modelSource,
-    "RK",
+    "PR",
     "Name-State",
     {
-        phase: "LIQUID",
+        phase: "VAPOR-LIQUID",
         liquid_fugacity_mode: "EOS",
-        solver_method: "ls",
-        solver_options: solver_options
+        solver_method: "ls"
     }
 );
 
-
-console.log("Fugacity:");
+console.log("Roots:");
+console.log(JSON.stringify(roots, null, 2));
+console.log("Fugacity (VAPOR-LIQUID):");
 console.log(JSON.stringify(fugacity, null, 2));

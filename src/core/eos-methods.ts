@@ -213,6 +213,8 @@ export function calcFugacity({
   componentKey = "Name-State",
   phaseMode,
   solverMethod = "ls",
+  solverOptions,
+  solver_options,
   tolerance,
   criticalTolerance,
   liquidFugacityMode = "EOS"
@@ -224,6 +226,7 @@ export function calcFugacity({
   const resolvedMode = phaseModeOrDefault(phaseMode);
   const sharedOptions: Record<string, unknown> = {
     solver_method: solverMethod,
+    solver_options: solverOptions ?? solver_options,
     liquid_fugacity_mode: liquidFugacityMode
   };
   if (typeof tolerance === "number") sharedOptions.tolerance = tolerance;

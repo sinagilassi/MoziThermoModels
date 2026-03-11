@@ -50,7 +50,10 @@ const input = {
   modelSource,
   modelName: "PR" as const,
   phaseMode: "auto" as const,
-  solverMethod: "root" as const
+  solverMethod: "root" as const,
+  solverOptions: {
+    qr: { max_iter: 300, tol: 1e-12, polish_newton: true }
+  }
 };
 
 const resCamelAlias = calFugacity(input);

@@ -13,6 +13,19 @@ export interface MultiStartOptions {
   xtol?: number;
 }
 
+export interface QrSolverOptions {
+  max_iter?: number;
+  tol?: number;
+  polish_newton?: boolean;
+}
+
+export interface EosSolverOptions {
+  ls?: MultiStartOptions;
+  newton?: MultiStartOptions;
+  fsolve?: MultiStartOptions;
+  qr?: QrSolverOptions;
+}
+
 export interface SolverRunResult {
   roots: number[];
   solver_method: SolverMethod;

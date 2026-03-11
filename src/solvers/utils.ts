@@ -157,8 +157,9 @@ export function buildRootSearchWindows(
     return guesses.map((g) => ({ guess: g, window: [bMid, bMax] }));
   }
   if (rootId === 4) {
-    guesses = linspace(bMin, bMax, guessNo);
-    return guesses.map((g) => ({ guess: g, window: [bMin, bMax] }));
+    // Superheat/supercritical branch should search vapor-side region.
+    guesses = linspace(bMid, bMax, guessNo);
+    return guesses.map((g) => ({ guess: g, window: [bMid, bMax] }));
   }
   throw new ThermoModelError(`Invalid root analysis id: ${rootId}`, "INVALID_ROOT_ID");
 }

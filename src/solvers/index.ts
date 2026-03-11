@@ -1,4 +1,4 @@
-export type { MultiStartOptions, ScalarFunctionContext, SolverRunResult } from "./types";
+export type { EosSolverOptions, MultiStartOptions, QrSolverOptions, ScalarFunctionContext, SolverRunResult } from "./types";
 
 export {
   buildRootSearchWindows,
@@ -13,10 +13,12 @@ export {
 } from "./utils";
 
 export { solveCubicRealRoots } from "./cubic";
+export { solveByCompanionQr } from "./companion-qr";
 
 export {
   solveByFsolveLikeMultiStart,
   solveByLeastSquaresMultiStart,
   solveByNewtonMultiStart,
-  solveByPolynomialRoots
+  solveByPolynomialRoots,
+  solveByQr
 } from "./strategies";

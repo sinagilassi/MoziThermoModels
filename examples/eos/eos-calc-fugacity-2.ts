@@ -52,7 +52,10 @@ const base = {
   modelSource,
   modelName: "PR" as const,
   componentKey: "Name-State" as const,
-  solverMethod: "ls" as const
+  solverMethod: "qr" as const,
+  solverOptions: {
+    qr: { max_iter: 300, tol: 1e-12, polish_newton: true }
+  }
 };
 
 const auto = calcFugacity({

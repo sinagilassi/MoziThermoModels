@@ -1,10 +1,12 @@
 import { ThermoModelError } from "@/errors";
 import {
-  selectRootsByAnalysis,
   solveByFsolveLikeMultiStart,
   solveByLeastSquaresMultiStart,
   solveByNewtonMultiStart,
   solveByPolynomialRoots,
+  selectRootsByAnalysis,
+  solveByQr,
+  type EosSolverOptions
 } from "@/solvers";
 import type { EosModelName, SolverMethod } from "@/types";
 import { EOSModels, type ComponentEosParams, type MixtureEosParams } from "./eosmodels";
@@ -78,7 +80,8 @@ export class EOSManager extends EOSModels {
    * @param rootAnalysis - Root analysis metadata with phase and root selection index.
    * @param xi - Mole fractions for mixture mode (defaults to equal fractions).
    * @param eosModel - EOS model identifier. Defaults to `"SRK"`.
-   * @param solverMethod - Root solver method (currently only `"ls"` is implemented). Defaults to `"ls"`.
+   * @param solverMethod - Root solver method.
+   * @param solverOptions - Optional nested solver options (`solver_options.qr`).
    * @param mode - Calculation mode: `"single"` or `"mixture"`. Defaults to `"single"`.
    * @returns EOS roots result including selected Z, all roots, and EOS parameters.
    * @throws {ThermoModelError} `EOS_ROOTS_NOT_FOUND` when no valid positive real roots exist.
@@ -91,7 +94,8 @@ export class EOSManager extends EOSModels {
     xi: number[] = [],
     eosModel: EosModelName = "SRK",
     solverMethod = "ls",
-    mode: "single" | "mixture" = "single"
+    mode: "single" | "mixture" = "single",
+    solverOptions: EosSolverOptions = {}
   ): EosRootsResult {
     const eosParams = components.map((c) => this.eosParameters(P, T, c, eosModel));
     const eosParamsComp: Record<string, ComponentEosParams | MixtureEosParams> = Object.fromEntries(eosParams.map((p) => [p.component, p]));
@@ -112,6 +116,10 @@ export class EOSManager extends EOSModels {
     const rootId = rootAnalysis.root?.[0] ?? 3;
 
     const requestedSolver = solverMethod as SolverMethod;
+    if (!["ls", "root", "fsolve", "newton", "qr"].includes(requestedSolver)) {
+      throw new ThermoModelError(`Invalid solver_method: ${solverMethod}`, "INVALID_SOLVER_METHOD");
+    }
+
     const fnCtx = {
       fn: (x: number, ctx: ComponentEosParams | MixtureEosParams) =>
         mode === "single"
@@ -121,20 +129,21 @@ export class EOSManager extends EOSModels {
     };
 
     let allRoots: number[] = [];
-    if (requestedSolver === "ls") {
-      allRoots = solveByLeastSquaresMultiStart(rootId, fnCtx).roots;
-    } else if (requestedSolver === "newton") {
-      allRoots = solveByNewtonMultiStart(fnCtx).roots;
-    } else if (requestedSolver === "fsolve") {
-      allRoots = solveByFsolveLikeMultiStart(fnCtx).roots;
-    } else if (requestedSolver === "root") {
-      allRoots = solveByPolynomialRoots([a, b, c, d]).roots;
-    } else {
-      throw new ThermoModelError(`Invalid solver_method: ${solverMethod}`, "INVALID_SOLVER_METHOD");
-    }
+    if (requestedSolver === "root") allRoots = solveByPolynomialRoots([a, b, c, d], { positiveOnly: true }).roots;
+    else if (requestedSolver === "ls") allRoots = solveByLeastSquaresMultiStart(rootId, fnCtx, solverOptions.ls ?? {}, { positiveOnly: true }).roots;
+    else if (requestedSolver === "newton") allRoots = solveByNewtonMultiStart(fnCtx, solverOptions.newton ?? {}, { positiveOnly: true }).roots;
+    else if (requestedSolver === "fsolve") allRoots = solveByFsolveLikeMultiStart(fnCtx, solverOptions.fsolve ?? {}, { positiveOnly: true }).roots;
+    else allRoots = solveByQr([a, b, c, d], { positiveOnly: true }, solverOptions).roots;
+
+    const solverNote = `Solver path: ${requestedSolver}`;
 
     const roots = selectRootsByAnalysis(rootId, allRoots);
-    if (!roots.length) throw new ThermoModelError("No valid EOS roots found", "EOS_ROOTS_NOT_FOUND");
+    if (!roots.length) {
+      throw new ThermoModelError(
+        `No valid EOS roots found (solver=${requestedSolver}; raw_roots=${JSON.stringify(allRoots)})`,
+        "EOS_ROOTS_NOT_FOUND"
+      );
+    }
     const phase = String(rootAnalysis.phase ?? "").toUpperCase();
     const phaseAwareZ = (() => {
       if (phase === "LIQUID") return Math.min(...roots);
@@ -151,12 +160,13 @@ export class EOSManager extends EOSModels {
       roots,
       eos_params: params0,
       eos_params_comp: eosParamsComp,
-      solver_method: requestedSolver
+      solver_method: requestedSolver,
+      solver_note: solverNote
     };
   }
 
   /**
-   * Solves cubic polynomial for real roots using analytical cubic formula.
+   * Solves cubic polynomial for real roots using the unified QR solver.
    *
    * Filters out non-physical roots (negative or non-finite) and removes near-duplicates.
    *
@@ -168,7 +178,7 @@ export class EOSManager extends EOSModels {
     const run = solveByLeastSquaresMultiStart(rootId, {
       fn: (x, c) => (((c[0] * x + c[1]) * x + c[2]) * x + c[3]),
       ctx: coeff
-    });
+    }, {}, { positiveOnly: true });
     return selectRootsByAnalysis(rootId, run.roots);
   }
 
@@ -214,6 +224,7 @@ export class EOSManager extends EOSModels {
     mode: "single" | "mixture";
     rootAnalysis: RootAnalysisLike;
     solverMethod?: string;
+    solverOptions?: EosSolverOptions;
   }) {
     const rootRes = this.eosRoots(
       args.P,
@@ -223,7 +234,8 @@ export class EOSManager extends EOSModels {
       args.yi,
       args.eosModel,
       args.solverMethod ?? "ls",
-      args.mode
+      args.mode,
+      args.solverOptions ?? {}
     );
     const Z = rootRes.Z;
     if (args.mode === "single") {

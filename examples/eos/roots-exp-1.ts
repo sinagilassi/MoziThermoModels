@@ -19,11 +19,9 @@ function hasApprox(values: number[], target: number, tol = 1e-5): boolean {
 function runCase(label: string, spec: RunSpec) {
   const res = eosEqSolver(A, B, C, {
     solver_method: spec.solver_method,
-    guessNo: 100,
-    bounds: [-2, 3, 0.5],
-    maxIter: 200,
-    ftol: 1e-10,
-    xtol: 1e-10
+    solver_options: {
+      qr: { max_iter: 300, tol: 1e-12, polish_newton: true }
+    }
   });
 
   console.log(`\n[${label}]`);
@@ -41,5 +39,6 @@ runCase("root", { solver_method: "root" });
 runCase("ls", { solver_method: "ls" });
 runCase("newton", { solver_method: "newton" });
 runCase("fsolve", { solver_method: "fsolve" });
+runCase("qr", { solver_method: "qr" });
 
-console.log("\nAll eosEqSolver runs found the expected real roots, including negative roots.");
+console.log("\nAll eosEqSolver runs route to the unified QR solver and found expected roots.");

@@ -149,6 +149,33 @@ describe("eos", () => {
     const roots = liquid.roots ?? [];
     expect(roots.length).toBeGreaterThan(0);
     expect(Number(liquid.selected_root)).toBeCloseTo(Math.min(...roots), 10);
+    expect(typeof liquid.solver_method).toBe("string");
+  });
+
+  it("retains result and diagnostics for liquid mixture roots", () => {
+    const res = calcMixtureFugacity(
+      mixtureComponents,
+      { value: 10, unit: "bar" },
+      { value: 444, unit: "K" },
+      mixtureModelSource,
+      "RK",
+      "Name-State",
+      {
+        phase: "LIQUID",
+        liquid_fugacity_mode: "EOS",
+        solver_method: "ls",
+        k_ij: [
+          [0, 0.18],
+          [0.18, 0]
+        ]
+      }
+    );
+
+    const liquid = res.results.LIQUID;
+    expect(liquid).toBeDefined();
+    expect(Number(liquid.selected_root)).toBeGreaterThan(0);
+    expect(typeof liquid.solver_method).toBe("string");
+    expect(liquid.solver_method).toBe("ls");
   });
 
   it("throws not implemented for liquid mixture Poynting mode", () => {

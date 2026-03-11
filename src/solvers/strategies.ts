@@ -1,6 +1,7 @@
 import { solveCubicRealRoots } from "./cubic";
-import { fsolveLikeScalar, leastSquaresScalar, newtonScalar } from "./scalar";
-import type { MultiStartOptions, ScalarFunctionContext, SolverRunResult } from "./types";
+import { solveByCompanionQr } from "./companion-qr";
+import { bracketRootsInWindow, fsolveLikeScalar, leastSquaresScalar, newtonScalar } from "./scalar";
+import type { EosSolverOptions, MultiStartOptions, ScalarFunctionContext, SolverRunResult } from "./types";
 import { buildRootSearchWindows, linspace, normalizeRootCandidates } from "./utils";
 
 type RootNormalizationOptions = {
@@ -11,10 +12,6 @@ type RootNormalizationOptions = {
 
 /**
  * Solve a cubic polynomial using the analytic cubic solver and normalize the real roots.
- *
- * @param coeff Polynomial coefficients as `[a, b, c, d]` for `ax^3 + bx^2 + cx + d = 0`.
- * @param normalizeOptions Root normalization controls.
- * @returns Solver run result with method set to `"root"`.
  */
 export function solveByPolynomialRoots(
   coeff: [number, number, number, number],
@@ -28,13 +25,18 @@ export function solveByPolynomialRoots(
 }
 
 /**
+ * Solve a cubic polynomial with companion-matrix QR and normalize roots.
+ */
+export function solveByQr(
+  coeff: [number, number, number, number],
+  normalizeOptions: RootNormalizationOptions = {},
+  solverOptions: EosSolverOptions = {}
+): SolverRunResult {
+  return solveByCompanionQr(coeff, solverOptions.qr, normalizeOptions);
+}
+
+/**
  * Run Newton multi-start root finding over a fixed guess grid.
- *
- * @typeParam T Context object type passed into `target.fn`.
- * @param target Function context containing residual function and immutable context.
- * @param options Multi-start and convergence options.
- * @param normalizeOptions Root normalization controls.
- * @returns Aggregated solver result with normalized roots and diagnostics.
  */
 export function solveByNewtonMultiStart<T>(
   target: ScalarFunctionContext<T>,
@@ -68,14 +70,6 @@ export function solveByNewtonMultiStart<T>(
 
 /**
  * Run a hybrid fsolve-like multi-start solver.
- *
- * Uses derivative-based updates when stable and secant fallback otherwise.
- *
- * @typeParam T Context object type passed into `target.fn`.
- * @param target Function context containing residual function and immutable context.
- * @param options Multi-start and convergence options.
- * @param normalizeOptions Root normalization controls.
- * @returns Aggregated solver result with normalized roots and diagnostics.
  */
 export function solveByFsolveLikeMultiStart<T>(
   target: ScalarFunctionContext<T>,
@@ -109,13 +103,6 @@ export function solveByFsolveLikeMultiStart<T>(
 
 /**
  * Run least-squares style multi-start root search within analysis windows.
- *
- * @typeParam T Context object type passed into `target.fn`.
- * @param rootId Root-analysis selector used to define search windows.
- * @param target Function context containing residual function and immutable context.
- * @param options Multi-start and convergence options.
- * @param normalizeOptions Root normalization controls.
- * @returns Aggregated solver result with normalized roots and diagnostics.
  */
 export function solveByLeastSquaresMultiStart<T>(
   rootId: number,
@@ -124,17 +111,38 @@ export function solveByLeastSquaresMultiStart<T>(
   normalizeOptions: RootNormalizationOptions = {}
 ): SolverRunResult {
   const guessNo = options.guessNo ?? 50;
-  const windows = buildRootSearchWindows(rootId, guessNo, options.bounds ?? [-2, 5, 0.5]);
+  const bounds = options.bounds ?? [-2, 5, 0.5] as [number, number, number];
+  const windows = buildRootSearchWindows(rootId, guessNo, bounds);
   const roots: number[] = [];
+  const candidateDiagnostics: Array<{ x: number; residual: number; source: "bracket" | "ls"; window: [number, number] }> = [];
   let iterations = 0;
   let successCount = 0;
-
+  let bracketSuccessCount = 0;
   for (const item of windows) {
+    const bracketed = bracketRootsInWindow((x) => target.fn(x, target.ctx), item.window, options);
+    if (bracketed.length) {
+      roots.push(...bracketed);
+      bracketSuccessCount += bracketed.length;
+      for (const x of bracketed) {
+        candidateDiagnostics.push({
+          x,
+          residual: Math.abs(target.fn(x, target.ctx)),
+          source: "bracket",
+          window: item.window
+        });
+      }
+    }
     const res = leastSquaresScalar((x) => target.fn(x, target.ctx), item.guess, item.window, options);
     iterations += res.iterations;
     if (res.success && res.x != null) {
       roots.push(res.x);
       successCount += 1;
+      candidateDiagnostics.push({
+        x: res.x,
+        residual: Math.abs(target.fn(res.x, target.ctx)),
+        source: "ls",
+        window: item.window
+      });
     }
   }
 
@@ -142,6 +150,14 @@ export function solveByLeastSquaresMultiStart<T>(
     roots: normalizeRootCandidates(roots, normalizeOptions),
     solver_method: "ls",
     iterations,
-    diagnostics: { guessNo, successCount, rootId }
+    diagnostics: {
+      guessNo,
+      successCount,
+      bracketSuccessCount,
+      rootId,
+      bounds,
+      windowsCount: windows.length,
+      candidates: candidateDiagnostics
+    }
   };
 }

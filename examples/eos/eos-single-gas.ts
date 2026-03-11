@@ -54,10 +54,14 @@ const modelSource = { dataSource, equationSource };
 
 const res = calcGasFugacity(
   propane,
-  { value: 9.99, unit: "bar" },
+  { value: 11, unit: "bar" },
   { value: 300.1, unit: "K" },
   modelSource,
-  "PR"
+  "SRK",
+  "Name-State",
+  {
+    phase: "VAPOR-LIQUID"
+  }
 );
 
 // log result

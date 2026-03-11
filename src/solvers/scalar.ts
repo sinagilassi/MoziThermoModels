@@ -108,43 +108,139 @@ export function leastSquaresScalar(
   const maxIter = options.maxIter ?? 80;
   let [lo, hi] = window;
   if (!(lo < hi)) return { success: false, iterations: 1 };
-  let xBest = clamp(x0, lo, hi);
-  let gBest = sqSafe(fn(xBest));
+  let x = clamp(x0, lo, hi);
+  let fx = fn(x);
+  if (!Number.isFinite(fx)) return { success: false, iterations: 1 };
+  if (Math.abs(fx) <= ftol) return { success: true, x, iterations: 1 };
+
+  let g = sqSafe(fx);
+  let bestX = x;
+  let bestG = g;
+  let trust = Math.max((hi - lo) / 6, xtol * 10);
   let iterations = 0;
 
-  const gridN = 9;
   for (let k = 0; k < maxIter; k++) {
     iterations += 1;
-    const pts = linspace(lo, hi, gridN);
-    for (const x of pts) {
-      const g = sqSafe(fn(x));
-      if (g < gBest) {
-        gBest = g;
-        xBest = x;
-      }
-      if (g <= ftol * ftol) {
-        return { success: true, x, iterations };
-      }
+    const dfx = numericalDerivative(fn, x);
+
+    // Least-squares scalar step ~= Gauss-Newton/Newton on residual
+    let step = 0;
+    if (Number.isFinite(dfx) && Math.abs(dfx) > 1e-14) {
+      step = -fx / dfx;
+    } else {
+      // Derivative is poor: probe both trust-radius directions and pick the better one.
+      const xp = clamp(x + trust, lo, hi);
+      const xm = clamp(x - trust, lo, hi);
+      const gp = sqSafe(fn(xp));
+      const gm = sqSafe(fn(xm));
+      step = gp <= gm ? (xp - x) : (xm - x);
     }
 
-    const span = hi - lo;
-    if (span <= xtol) break;
-    const delta = span / 4;
-    lo = Math.max(window[0], xBest - delta);
-    hi = Math.min(window[1], xBest + delta);
+    // Trust-region clip
+    if (Math.abs(step) > trust) step = Math.sign(step || 1) * trust;
+    if (!Number.isFinite(step)) break;
+
+    const xTrial = clamp(x + step, lo, hi);
+    const fTrial = fn(xTrial);
+    if (!Number.isFinite(fTrial)) {
+      trust *= 0.5;
+      if (trust <= xtol) break;
+      continue;
+    }
+    const gTrial = sqSafe(fTrial);
+
+    // Accept if objective improves, otherwise shrink trust region.
+    if (gTrial <= g) {
+      const dx = Math.abs(xTrial - x);
+      x = xTrial;
+      fx = fTrial;
+      g = gTrial;
+      if (g < bestG) {
+        bestG = g;
+        bestX = x;
+      }
+      if (Math.abs(fx) <= ftol) return { success: true, x, iterations };
+      if (dx <= xtol && g <= Math.max(ftol * ftol * 100, 1e-12)) break;
+      trust = Math.min(Math.max(trust * 1.5, xtol * 10), (hi - lo) / 2);
+    } else {
+      trust *= 0.5;
+      if (trust <= xtol) break;
+    }
   }
 
-  const polish = newtonScalar(fn, xBest, { ...options, maxIter: 20 });
-  if (polish.success && polish.x != null) return { success: true, x: polish.x, iterations: iterations + polish.iterations };
+  const polish = newtonScalar(fn, bestX, { ...options, maxIter: 20 });
+  if (polish.success && polish.x != null) {
+    const xPolish = polish.x;
+    const inWindow = xPolish >= window[0] - xtol && xPolish <= window[1] + xtol;
+    if (inWindow) return { success: true, x: xPolish, iterations: iterations + polish.iterations };
+  }
 
-  const bracket = findBracket(fn, window[0], window[1], 60);
+  const bracket = findBracket(fn, window[0], window[1], 160);
   if (bracket) {
-    const bis = bisection(fn, bracket[0], bracket[1], { ftol, xtol, maxIter: 80 });
+    const bis = bisection(fn, bracket[0], bracket[1], { ftol, xtol, maxIter: 120 });
     return { success: bis.success, x: bis.x, iterations: iterations + bis.iterations };
   }
 
-  const fBest = fn(xBest);
-  return { success: Number.isFinite(fBest) && Math.abs(fBest) <= Math.max(ftol * 10, 1e-6), x: xBest, iterations };
+  const fBest = fn(bestX);
+  // Match scipy.least_squares-style behavior from the Python reference:
+  // bounded minimizer is still a valid candidate even if residual is not near zero.
+  // Downstream root-analysis (min/max by phase region) consumes these candidates.
+  return { success: Number.isFinite(fBest) && Number.isFinite(bestX), x: bestX, iterations };
+}
+
+/**
+ * Find real roots in a bounded window by scanning for sign changes and
+ * refining each bracket with bisection.
+ *
+ * @param fn Residual function.
+ * @param window Search interval `[lo, hi]`.
+ * @param options Convergence options (`ftol`, `xtol`).
+ * @param scanN Number of scan points used to detect sign changes.
+ * @returns Candidate roots inside the window.
+ */
+export function bracketRootsInWindow(
+  fn: (x: number) => number,
+  window: [number, number],
+  options: MultiStartOptions,
+  scanN = 250
+): number[] {
+  const [lo, hi] = window;
+  if (!(lo < hi)) return [];
+  const ftol = options.ftol ?? 1e-8;
+  const xtol = options.xtol ?? 1e-8;
+  const xs = linspace(lo, hi, Math.max(scanN, 20));
+  const out: number[] = [];
+
+  let xPrev = xs[0];
+  let fPrev = fn(xPrev);
+  if (Number.isFinite(fPrev) && Math.abs(fPrev) <= ftol) out.push(xPrev);
+
+  for (let i = 1; i < xs.length; i++) {
+    const x = xs[i];
+    const fx = fn(x);
+    if (!Number.isFinite(fPrev) || !Number.isFinite(fx)) {
+      xPrev = x;
+      fPrev = fx;
+      continue;
+    }
+    if (Math.abs(fx) <= ftol) out.push(x);
+    if (Math.sign(fPrev) !== Math.sign(fx)) {
+      const bis = bisection(fn, xPrev, x, { ftol, xtol, maxIter: 120 });
+      if (bis.success && bis.x != null && Number.isFinite(bis.x)) out.push(bis.x);
+    }
+    xPrev = x;
+    fPrev = fx;
+  }
+
+  // Deduplicate numerically-close roots inside the same window.
+  out.sort((a, b) => a - b);
+  const deduped: number[] = [];
+  for (const r of out) {
+    if (!deduped.length || Math.abs(deduped[deduped.length - 1] - r) > Math.max(xtol * 10, 1e-8)) {
+      deduped.push(r);
+    }
+  }
+  return deduped;
 }
 
 /**

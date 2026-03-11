@@ -7,7 +7,28 @@ import { ModelSource } from "mozithermodb";
 export type EosModelName = "SRK" | "PR" | "RK" | "vdW";
 
 // NOTE: Solver Methods
-export type SolverMethod = "ls" | "newton" | "fsolve" | "root";
+export type SolverMethod = "ls" | "newton" | "fsolve" | "root" | "qr";
+
+export interface QrSolverOptions {
+    max_iter?: number;
+    tol?: number;
+    polish_newton?: boolean;
+}
+
+export interface IterativeSolverOptions {
+    guessNo?: number;
+    bounds?: [number, number, number];
+    maxIter?: number;
+    ftol?: number;
+    xtol?: number;
+}
+
+export interface EosSolverOptions {
+    ls?: IterativeSolverOptions;
+    newton?: IterativeSolverOptions;
+    fsolve?: IterativeSolverOptions;
+    qr?: QrSolverOptions;
+}
 
 // NOTE: Liquid Fugacity Calculation Modes
 export type LiquidFugacityMode = "EOS" | "Poynting";
@@ -50,6 +71,8 @@ export interface PureComponentFugacityInput {
     componentKey?: ComponentKey;
     phaseMode?: FugacityPhaseMode;
     solverMethod?: SolverMethod;
+    solverOptions?: EosSolverOptions;
+    solver_options?: EosSolverOptions;
     tolerance?: number;
     criticalTolerance?: CriticalTolerance;
     liquidFugacityMode?: LiquidFugacityMode;
