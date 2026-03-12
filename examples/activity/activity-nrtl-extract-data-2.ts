@@ -1,3 +1,5 @@
+// import libs
+import { RawThermoRecord } from "mozithermodb";
 // ! MoziThermoModels
 import { buildBinaryMixtureData, calcActivityCoefficient } from "../../src";
 
@@ -11,7 +13,7 @@ function buildMatrixRows(
     aName: string,
     bName: string,
     values: [number, number, number, number]
-) {
+): RawThermoRecord[][] {
     const [v11, v12, v21, v22] = values;
     return [
         [
@@ -33,6 +35,21 @@ function buildMatrixRows(
     ];
 }
 
+function mergeMatrixRows(...matrices: RawThermoRecord[][][]): RawThermoRecord[][] {
+    if (matrices.length === 0) return [];
+
+    const metadataNames = new Set(["Mixture", "Name", "Formula", "State"]);
+    const rowCount = matrices[0].length;
+
+    return Array.from({ length: rowCount }, (_, rowIndex) => {
+        const mergedRow = [...matrices[0][rowIndex]];
+        for (let i = 1; i < matrices.length; i += 1) {
+            mergedRow.push(...matrices[i][rowIndex].filter((record) => !metadataNames.has(record.name)));
+        }
+        return mergedRow;
+    });
+}
+
 // SECTION: dummy NRTL matrix data (coefficient form)
 // tau_ij = a_ij + b_ij/T + c_ij*ln(T) + d_ij*T
 // Here b=c=d=0, so tau_ij = a_ij
@@ -41,27 +58,13 @@ const bRows = buildMatrixRows("b", "ethanol", "water", [0, 0, 0, 0]);
 const cRows = buildMatrixRows("c", "ethanol", "water", [0, 0, 0, 0]);
 const dRows = buildMatrixRows("d", "ethanol", "water", [0, 0, 0, 0]);
 const alphaRows = buildMatrixRows("alpha", "ethanol", "water", [0, 0.3, 0.3, 0]);
+const nrtlRows = mergeMatrixRows(aRows, bRows, cRows, dRows, alphaRows);
 
-const aData = buildBinaryMixtureData(components as any, aRows as any) as Record<string, Record<string, unknown>>;
-const bData = buildBinaryMixtureData(components as any, bRows as any) as Record<string, Record<string, unknown>>;
-const cData = buildBinaryMixtureData(components as any, cRows as any) as Record<string, Record<string, unknown>>;
-const dData = buildBinaryMixtureData(components as any, dRows as any) as Record<string, Record<string, unknown>>;
-const alphaData = buildBinaryMixtureData(components as any, alphaRows as any) as Record<string, Record<string, unknown>>;
+const nrtlData = buildBinaryMixtureData(components as any, nrtlRows as any) as Record<string, Record<string, unknown>>;
 
-// SECTION: merge into one modelSource (mixture node contains coefficient + alpha MoziMatrixData)
-const dataSource: Record<string, Record<string, unknown>> = {};
-for (const mixtureId of Object.keys(aData)) {
-    dataSource[mixtureId] = {
-        a: aData[mixtureId].a ?? aData[mixtureId].a_ij,
-        b: bData[mixtureId].b ?? bData[mixtureId].b_ij,
-        c: cData[mixtureId].c ?? cData[mixtureId].c_ij,
-        d: dData[mixtureId].d ?? dData[mixtureId].d_ij,
-        alpha: alphaData[mixtureId].alpha ?? alphaData[mixtureId].alpha_ij
-    };
-}
-
+// NOTE: create model source
 const modelSource = {
-    dataSource,
+    dataSource: nrtlData,
     equationSource: {}
 };
 
