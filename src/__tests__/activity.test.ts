@@ -365,6 +365,314 @@ describe("activity", () => {
     }
   });
 
+  it("calcActivityCoefficient NRTL computes tau_ij from kwargs coefficients + alpha_ij", () => {
+    const components: Array<{ name: string; formula: string; state: "l"; mole_fraction: number }> = [
+      { name: "ethanol", formula: "C2H5OH", state: "l", mole_fraction: 0.4 },
+      { name: "water", formula: "H2O", state: "l", mole_fraction: 0.6 }
+    ];
+
+    const kwargs = {
+      a_ij: {
+        "ethanol | ethanol": 1,
+        "ethanol | water": 2,
+        "water | ethanol": 3,
+        "water | water": 4
+      },
+      b_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      c_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      d_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      alpha_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0.3,
+        "water | ethanol": 0.3,
+        "water | water": 0
+      }
+    };
+
+    const [res, other] = calcActivityCoefficient(
+      components,
+      { value: 1, unit: "bar" },
+      { value: 298.15, unit: "K" },
+      { dataSource: {}, equationSource: {} } as any,
+      "NRTL",
+      "Name",
+      "Name",
+      "-",
+      "|",
+      undefined,
+      false,
+      kwargs
+    );
+
+    expect(Object.values(res.value).every((v) => v > 0)).toBe(true);
+    expect((other as any).tau_ij_comp["ethanol | water"]).toBeCloseTo(2, 10);
+    expect((other as any).tau_ij_comp["water | ethanol"]).toBeCloseTo(3, 10);
+  });
+
+  it("calcActivityCoefficient NRTL computes tau_ij from modelSource coefficients + alpha_ij", () => {
+    const components: Array<{ name: string; formula: string; state: "l"; mole_fraction: number }> = [
+      { name: "ethanol", formula: "C2H5OH", state: "l", mole_fraction: 0.4 },
+      { name: "water", formula: "H2O", state: "l", mole_fraction: 0.6 }
+    ];
+
+    const modelSource = {
+      dataSource: {
+        "ethanol|water": {
+          a_ij: { mozimatrixdata: buildMatrixRows("a", "ethanol", "water", [1, 2, 3, 4]) },
+          b_ij: { mozimatrixdata: buildMatrixRows("b", "ethanol", "water", [0, 0, 0, 0]) },
+          c_ij: { mozimatrixdata: buildMatrixRows("c", "ethanol", "water", [0, 0, 0, 0]) },
+          d_ij: { mozimatrixdata: buildMatrixRows("d", "ethanol", "water", [0, 0, 0, 0]) },
+          alpha_ij: { mozimatrixdata: buildMatrixRows("alpha", "ethanol", "water", [0, 0.3, 0.3, 0]) }
+        }
+      },
+      equationSource: {}
+    };
+
+    const [, other] = calcActivityCoefficient(
+      components,
+      { value: 1, unit: "bar" },
+      { value: 298.15, unit: "K" },
+      modelSource as any,
+      "NRTL",
+      "Name",
+      "Name",
+      "-",
+      "|"
+    );
+
+    expect((other as any).tau_ij_comp["ethanol | water"]).toBeCloseTo(2, 10);
+    expect((other as any).tau_ij_comp["water | ethanol"]).toBeCloseTo(3, 10);
+  });
+
+  it("calcActivityCoefficient UNIQUAC computes tau_ij from kwargs coefficients with r_i/q_i", () => {
+    const components: Array<{ name: string; formula: string; state: "l"; mole_fraction: number }> = [
+      { name: "ethanol", formula: "C2H5OH", state: "l", mole_fraction: 0.4 },
+      { name: "water", formula: "H2O", state: "l", mole_fraction: 0.6 }
+    ];
+
+    const kwargs = {
+      a_ij: {
+        "ethanol | ethanol": 1,
+        "ethanol | water": 0.8,
+        "water | ethanol": 1.2,
+        "water | water": 1
+      },
+      b_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      c_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      d_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      r_i: { ethanol: 2.1055, water: 0.92 },
+      q_i: { ethanol: 1.972, water: 1.4 }
+    };
+
+    const [res, other] = calcActivityCoefficient(
+      components,
+      { value: 1, unit: "bar" },
+      { value: 298.15, unit: "K" },
+      { dataSource: {}, equationSource: {} } as any,
+      "UNIQUAC",
+      "Name",
+      "Name",
+      "-",
+      "|",
+      undefined,
+      false,
+      kwargs
+    );
+
+    expect(Object.keys(res.value)).toContain("ethanol");
+    expect((other as any).tau_ij_comp["ethanol | water"]).toBeCloseTo(0.8, 10);
+    expect((other as any).tau_ij_comp["water | ethanol"]).toBeCloseTo(1.2, 10);
+  });
+
+  it("calcActivityCoefficient UNIQUAC computes tau_ij from modelSource coefficients with r_i/q_i", () => {
+    const components: Array<{ name: string; formula: string; state: "l"; mole_fraction: number }> = [
+      { name: "ethanol", formula: "C2H5OH", state: "l", mole_fraction: 0.4 },
+      { name: "water", formula: "H2O", state: "l", mole_fraction: 0.6 }
+    ];
+
+    const modelSource = {
+      dataSource: {
+        "ethanol|water": {
+          a_ij: { mozimatrixdata: buildMatrixRows("a", "ethanol", "water", [1, 0.8, 1.2, 1]) },
+          b_ij: { mozimatrixdata: buildMatrixRows("b", "ethanol", "water", [0, 0, 0, 0]) },
+          c_ij: { mozimatrixdata: buildMatrixRows("c", "ethanol", "water", [0, 0, 0, 0]) },
+          d_ij: { mozimatrixdata: buildMatrixRows("d", "ethanol", "water", [0, 0, 0, 0]) },
+          r_i: { ethanol: 2.1055, water: 0.92 },
+          q_i: { ethanol: 1.972, water: 1.4 }
+        }
+      },
+      equationSource: {}
+    };
+
+    const [res, other] = calcActivityCoefficient(
+      components,
+      { value: 1, unit: "bar" },
+      { value: 298.15, unit: "K" },
+      modelSource as any,
+      "UNIQUAC",
+      "Name",
+      "Name",
+      "-",
+      "|"
+    );
+
+    expect(Object.keys(res.value)).toContain("ethanol");
+    expect((other as any).tau_ij_comp["ethanol | water"]).toBeCloseTo(0.8, 10);
+    expect((other as any).tau_ij_comp["water | ethanol"]).toBeCloseTo(1.2, 10);
+  });
+
+  it("calcActivityCoefficient NRTL prefers direct tau_ij over dg_ij and coefficients", () => {
+    const components: Array<{ name: string; formula: string; state: "l"; mole_fraction: number }> = [
+      { name: "ethanol", formula: "C2H5OH", state: "l", mole_fraction: 0.4 },
+      { name: "water", formula: "H2O", state: "l", mole_fraction: 0.6 }
+    ];
+
+    const kwargs = {
+      tau_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 5.5,
+        "water | ethanol": 6.6,
+        "water | water": 0
+      },
+      dg_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 10_000,
+        "water | ethanol": 12_000,
+        "water | water": 0
+      },
+      a_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0.1,
+        "water | ethanol": 0.2,
+        "water | water": 0
+      },
+      b_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      c_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      d_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0,
+        "water | ethanol": 0,
+        "water | water": 0
+      },
+      alpha_ij: {
+        "ethanol | ethanol": 0,
+        "ethanol | water": 0.3,
+        "water | ethanol": 0.3,
+        "water | water": 0
+      }
+    };
+
+    const [, other] = calcActivityCoefficient(
+      components,
+      { value: 1, unit: "bar" },
+      { value: 298.15, unit: "K" },
+      { dataSource: {}, equationSource: {} } as any,
+      "NRTL",
+      "Name",
+      "Name",
+      "-",
+      "|",
+      undefined,
+      false,
+      kwargs
+    );
+
+    expect((other as any).tau_ij_comp["ethanol | water"]).toBeCloseTo(5.5, 10);
+    expect((other as any).tau_ij_comp["water | ethanol"]).toBeCloseTo(6.6, 10);
+  });
+
+  it("calcActivityCoefficient keeps INVALID_ACTIVITY_INPUT when one coefficient map is missing", () => {
+    const components: Array<{ name: string; formula: string; state: "l"; mole_fraction: number }> = [
+      { name: "ethanol", formula: "C2H5OH", state: "l", mole_fraction: 0.4 },
+      { name: "water", formula: "H2O", state: "l", mole_fraction: 0.6 }
+    ];
+
+    try {
+      calcActivityCoefficient(
+        components,
+        { value: 1, unit: "bar" },
+        { value: 298.15, unit: "K" },
+        { dataSource: {}, equationSource: {} } as any,
+        "NRTL",
+        "Name",
+        "Name",
+        "-",
+        "|",
+        undefined,
+        false,
+        {
+          a_ij: {
+            "ethanol | ethanol": 1,
+            "ethanol | water": 2,
+            "water | ethanol": 3,
+            "water | water": 4
+          },
+          b_ij: {
+            "ethanol | ethanol": 0,
+            "ethanol | water": 0,
+            "water | ethanol": 0,
+            "water | water": 0
+          },
+          c_ij: {
+            "ethanol | ethanol": 0,
+            "ethanol | water": 0,
+            "water | ethanol": 0,
+            "water | water": 0
+          },
+          alpha_ij: {
+            "ethanol | ethanol": 0,
+            "ethanol | water": 0.3,
+            "water | ethanol": 0.3,
+            "water | water": 0
+          }
+        }
+      );
+      expect.fail("expected INVALID_ACTIVITY_INPUT");
+    } catch (error) {
+      expect((error as any).code).toBe("INVALID_ACTIVITY_INPUT");
+    }
+  });
+
   it("UNIFAC direct model workflow computes gamma using group-name component groups", () => {
     const model = new UNIFAC(["acetone-l", "n_heptane-l"]);
     model.load_data(unifacGroupData as any, unifacInteractionData as any);

@@ -19,6 +19,7 @@ import { UNIQUAC } from "./uniquac";
 import { UNIFAC } from "./unifac";
 import type { UnifacComponentGroupCounts, UnifacGroupData, UnifacInteractionData } from "./unifac1";
 import {
+  calcTauIjByCoefficients,
   calcTauIjWithDgIjUsingNrtlModel,
   calcTauIjWithDUijUsingUniquacModel
 } from "./main";
@@ -541,6 +542,67 @@ export function calcActivityCoefficient(
       tau_ij = converted.tau_ij_comp;
     }
 
+    // NOTE: if tau_ij is still not available, attempt coefficient-based conversion:
+    // tau_ij = a_ij + b_ij/T + c_ij*ln(T) + d_ij*T
+    if (!tau_ij && !dg_ij) {
+      const a_ij =
+        (kwargs.a_ij as Record<string, number> | undefined) ??
+        maybeExtractActivityParams(
+          normalizedModelSource,
+          mixtureId, ["a_ij", "a"],
+          components,
+          componentKey,
+          "matrix"
+        );
+      const b_ij =
+        (kwargs.b_ij as Record<string, number> | undefined) ??
+        maybeExtractActivityParams(
+          normalizedModelSource,
+          mixtureId,
+          ["b_ij", "b"],
+          components,
+          componentKey,
+          "matrix"
+        );
+      const c_ij =
+        (kwargs.c_ij as Record<string, number> | undefined) ??
+        maybeExtractActivityParams(
+          normalizedModelSource,
+          mixtureId,
+          ["c_ij", "c"],
+          components,
+          componentKey,
+          "matrix"
+        );
+      const d_ij =
+        (kwargs.d_ij as Record<string, number> | undefined) ??
+        maybeExtractActivityParams(
+          normalizedModelSource,
+          mixtureId,
+          ["d_ij", "d"],
+          components,
+          componentKey,
+          "matrix"
+        );
+
+      // >> check
+      if (a_ij && b_ij && c_ij && d_ij) {
+        const converted = calcTauIjByCoefficients({
+          components,
+          temperature,
+          a_ij,
+          b_ij,
+          c_ij,
+          d_ij,
+          model: "NRTL",
+          mixture_delimiter: "|"
+        });
+
+        // >> calculate tau_ij from coefficients
+        tau_ij = converted.tau_ij_comp;
+      }
+    }
+
     // NOTE: if tau_ij is still not available, attempt extraction from modelSource;
     if (!tau_ij) {
       tau_ij = maybeExtractActivityParams(
@@ -555,7 +617,7 @@ export function calcActivityCoefficient(
 
     // ! FINAL CHECK: NRTL requires both tau_ij and alpha_ij to proceed; if either is missing, we cannot calculate activity coefficients
     if (!tau_ij || !alpha_ij) {
-      throw new ThermoModelError("NRTL requires tau_ij+alpha_ij (or dg_ij+alpha_ij)", "INVALID_ACTIVITY_INPUT");
+      throw new ThermoModelError("NRTL requires tau_ij+alpha_ij (or dg_ij+alpha_ij, or a_ij+b_ij+c_ij+d_ij+alpha_ij)", "INVALID_ACTIVITY_INPUT");
     }
 
     // NOTE: proceed with calculation
@@ -579,6 +641,34 @@ export function calcActivityCoefficient(
       const converted = calcTauIjWithDUijUsingUniquacModel(components, temperature, dU_ij, { mixture_delimiter: "|" });
       tau_ij = converted.tau_ij_comp;
     }
+    if (!tau_ij && !dU_ij) {
+      const a_ij =
+        (kwargs.a_ij as Record<string, number> | undefined) ??
+        maybeExtractActivityParams(normalizedModelSource, mixtureId, ["a_ij", "a"], components, componentKey, "matrix");
+      const b_ij =
+        (kwargs.b_ij as Record<string, number> | undefined) ??
+        maybeExtractActivityParams(normalizedModelSource, mixtureId, ["b_ij", "b"], components, componentKey, "matrix");
+      const c_ij =
+        (kwargs.c_ij as Record<string, number> | undefined) ??
+        maybeExtractActivityParams(normalizedModelSource, mixtureId, ["c_ij", "c"], components, componentKey, "matrix");
+      const d_ij =
+        (kwargs.d_ij as Record<string, number> | undefined) ??
+        maybeExtractActivityParams(normalizedModelSource, mixtureId, ["d_ij", "d"], components, componentKey, "matrix");
+
+      if (a_ij && b_ij && c_ij && d_ij) {
+        const converted = calcTauIjByCoefficients({
+          components,
+          temperature,
+          a_ij,
+          b_ij,
+          c_ij,
+          d_ij,
+          model: "UNIQUAC",
+          mixture_delimiter: "|"
+        });
+        tau_ij = converted.tau_ij_comp;
+      }
+    }
     if (!tau_ij) tau_ij = maybeExtractActivityParams(normalizedModelSource, mixtureId, ["tau_ij", "tau"], components, componentKey, "matrix");
     const r_i =
       (kwargs.r_i as Record<string, number> | undefined) ??
@@ -587,7 +677,7 @@ export function calcActivityCoefficient(
       (kwargs.q_i as Record<string, number> | undefined) ??
       maybeExtractActivityParams(normalizedModelSource, mixtureId, ["q_i", "q"], components, componentKey, "vector");
     if (!tau_ij || !r_i || !q_i) {
-      throw new ThermoModelError("UNIQUAC requires tau_ij+r_i+q_i (or dU_ij+r_i+q_i)", "INVALID_ACTIVITY_INPUT");
+      throw new ThermoModelError("UNIQUAC requires tau_ij+r_i+q_i (or dU_ij+r_i+q_i, or a_ij+b_ij+c_ij+d_ij+r_i+q_i)", "INVALID_ACTIVITY_INPUT");
     }
     return calcActivityCoefficientUsingUniquacModel(
       components,
