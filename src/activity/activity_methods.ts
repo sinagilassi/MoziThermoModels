@@ -509,19 +509,56 @@ export function calcActivityCoefficient(
   const mixtureId = createMixtureId(components, mixtureKey, delimiter);
 
   if (modelName === "NRTL") {
+    // SECTION: NRTL parameter extraction and conversion logic
+    // NOTE: tau_ij can be provided directly, or calculated from dg_ij, or extracted from modelSource;
+    // alpha_ij is extracted from modelSource
     let tau_ij = kwargs.tau_ij as Record<string, number> | undefined;
     const dg_ij = kwargs.dg_ij as Record<string, number> | undefined;
+
+    // NOTE: alpha_ij is not convertible from dg_ij, so we only attempt extraction if it's not provided directly
     const alpha_ij =
       (kwargs.alpha_ij as Record<string, number> | undefined) ??
-      maybeExtractActivityParams(normalizedModelSource, mixtureId, ["alpha_ij", "alpha"], components, componentKey, "matrix");
+      maybeExtractActivityParams(
+        normalizedModelSource,
+        mixtureId,
+        ["alpha_ij", "alpha"],
+        components,
+        componentKey, "matrix"
+      );
+
+    // NOTE: if tau_ij is not provided but dg_ij is,
+    // we can attempt conversion using the NRTL relationship: tau_ij = dg_ij / (R * T)
     if (!tau_ij && dg_ij) {
-      const converted = calcTauIjWithDgIjUsingNrtlModel(components, temperature, dg_ij, { mixture_delimiter: "|" });
+      // ! calculate tau_ij from dg_ij
+      const converted = calcTauIjWithDgIjUsingNrtlModel(
+        components,
+        temperature,
+        dg_ij,
+        { mixture_delimiter: "|" }
+      );
+
+      // >> tau_ij object
       tau_ij = converted.tau_ij_comp;
     }
-    if (!tau_ij) tau_ij = maybeExtractActivityParams(normalizedModelSource, mixtureId, ["tau_ij", "tau"], components, componentKey, "matrix");
+
+    // NOTE: if tau_ij is still not available, attempt extraction from modelSource;
+    if (!tau_ij) {
+      tau_ij = maybeExtractActivityParams(
+        normalizedModelSource,
+        mixtureId,
+        ["tau_ij", "tau"],
+        components,
+        componentKey,
+        "matrix"
+      );
+    }
+
+    // ! FINAL CHECK: NRTL requires both tau_ij and alpha_ij to proceed; if either is missing, we cannot calculate activity coefficients
     if (!tau_ij || !alpha_ij) {
       throw new ThermoModelError("NRTL requires tau_ij+alpha_ij (or dg_ij+alpha_ij)", "INVALID_ACTIVITY_INPUT");
     }
+
+    // NOTE: proceed with calculation
     return calcActivityCoefficientUsingNrtlModel(
       components,
       pressure,
