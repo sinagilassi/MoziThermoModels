@@ -10,6 +10,7 @@ const components = [
 ] as Component[];
 
 // SECTION: dummy NRTL matrix data (coefficient form)
+// NOTE: case 1
 // tau_ij = a_ij + b_ij/T + c_ij*ln(T) + d_ij*T
 // Here b=c=d=0, so tau_ij = a_ij
 
@@ -41,6 +42,15 @@ const d: MoziMatObj = {
     "Water-H2O_Water-H2O": 0
 };
 
+// NOTE: case 2: dg_ij
+const dg: MoziMatObj = {
+    "Ethanol-C2H5OH_Ethanol-C2H5OH": 0,
+    "Ethanol-C2H5OH_Water-H2O": 0.3,
+    "Water-H2O_Ethanol-C2H5OH": 0.1,
+    "Water-H2O_Water-H2O": 0
+};
+
+// NOTE: alpha_ij
 const alpha: MoziMatObj = {
     "Ethanol-C2H5OH_Ethanol-C2H5OH": 0,
     "Ethanol-C2H5OH_Water-H2O": 0.2,
@@ -49,7 +59,7 @@ const alpha: MoziMatObj = {
 };
 
 // >> prop data
-const propData: Record<string, MoziMatObj> = {
+const propData1: Record<string, MoziMatObj> = {
     "a": a,
     "b": b,
     "c": c,
@@ -57,12 +67,20 @@ const propData: Record<string, MoziMatObj> = {
     "alpha": alpha
 }
 
+// >> prop data in dg_ij form
+const propData2: Record<string, MoziMatObj> = {
+    "dg": dg,
+    "alpha": alpha
+}
+
+const propData = [propData1, propData2]
+
 // NOTE: build binary mixture raw thermo data
 const nrtlRawThermoData = buildBinaryMatrixRawThermoData(
     components,
     "Name",
     "Name-Formula",
-    propData,
+    propData[1],
     "|",
     "12",
     ["i_j_1", "i_j_2"],

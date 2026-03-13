@@ -615,6 +615,30 @@ export function calcActivityCoefficient(
       );
     }
 
+    // NOTE: if tau_ij is still not available, use dg_ij taken from modelSource to calculate tau_ij
+    if (!tau_ij && !dg_ij) {
+      const extractedDgIj = maybeExtractActivityParams(
+        normalizedModelSource,
+        mixtureId,
+        ["dg_ij", "dg"],
+        components,
+        componentKey,
+        "matrix"
+      );
+
+      // >> calculate tau_ij from extracted dg_ij
+      if (extractedDgIj) {
+        const converted = calcTauIjWithDgIjUsingNrtlModel(
+          components,
+          temperature,
+          extractedDgIj,
+          { mixture_delimiter: "|" }
+        );
+        tau_ij = converted.tau_ij_comp;
+      }
+
+    }
+
     // ! FINAL CHECK: NRTL requires both tau_ij and alpha_ij to proceed; if either is missing, we cannot calculate activity coefficients
     if (!tau_ij || !alpha_ij) {
       throw new ThermoModelError("NRTL requires tau_ij+alpha_ij (or dg_ij+alpha_ij, or a_ij+b_ij+c_ij+d_ij+alpha_ij)", "INVALID_ACTIVITY_INPUT");
