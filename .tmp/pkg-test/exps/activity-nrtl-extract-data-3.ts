@@ -1,6 +1,6 @@
 // import libs
 import { Component } from "mozithermodb-settings";
-import { RawThermoRecord, MoziMatObj, buildBinaryMatrixRawThermoData } from "mozithermodb";
+import { RawThermoRecord, MoziMatObj, buildBinaryMatrixRawThermoData, buildModelSource } from "mozithermodb";
 // ! MoziThermoModels
 import { buildBinaryMixtureData, calcActivityCoefficient } from "mozithermomodels";
 
@@ -92,10 +92,7 @@ const nrtlRows = Object.values(nrtlRawThermoData) as RawThermoRecord[][];
 const nrtlData = buildBinaryMixtureData(components, nrtlRows);
 
 // NOTE: create model source
-const modelSource = {
-    dataSource: nrtlData,
-    equationSource: {}
-};
+const modelSource = buildModelSource({}, {}, nrtlData)
 
 console.log("ModelSource mixture keys:", Object.keys(modelSource.dataSource));
 console.log("Sample node:", modelSource.dataSource["Ethanol|Water"] ?? modelSource.dataSource["Water|Ethanol"]);
