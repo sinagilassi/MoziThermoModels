@@ -116,3 +116,5 @@ const [result, other] = calcActivityCoefficient(
 console.log("Activity result:", result);
 console.log("Computed tau_ij_comp (from a/b/c/d):", (other as any).tau_ij_comp);
 console.log("Extracted alpha_ij_comp:", (other as any).alpha_ij_comp);
+// excess Gibbs free energy of mixing at infinite dilution
+console.log("Other:", (other as any));
